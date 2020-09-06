@@ -1,0 +1,93 @@
+/* Import Google fonts */
+
+@import url('https://fonts.googleapis.com/css2?family=Bungee&family=Bungee+Hairline&family=Bungee+Inline&family=Bungee+Outline&family=Bungee+Shade&family=Fascinate&family=Kumar+One+Outline&family=Major+Mono+Display&family=Monofett&family=Plaster&display=swap');
+
+
+/* Full page style info */
+body
+{
+	background-color: salmon;
+	margin: 25px;
+}
+
+/* Info on row of links */
+.linkrow
+{
+	position: relative;
+	display: flex;
+	justify-content: space-around;
+	width: 100%;
+	margin-bottom: 200px;
+}
+
+/* Links inside the row */
+.linkrow a
+{
+	font-size: 150%;
+	color:white;
+	text-decoration: none;
+	font-family: 'Monofett', 'cursive';
+	transition: all .5s ease-in-out;
+}
+
+/* Change background on mouse-over */
+.linkrow a:hover
+{
+	color: black;
+	transform: scale(1.25);
+}
+.instruction
+{
+	
+	display: flex;
+	justify-content: center;
+	width: 100%;
+	font-size: 150%;
+	color: red;
+	font-family: 'Monofett', 'cursive';
+}
+
+
+.centervisual
+{
+	position: absolute;
+	left: 50%;
+	-ms-transform: translate(-50%, -50%);
+	transform: translate(-50%, -50%);
+	font-family: 'Bungee Outline', 'cursive';
+	font-size: 300%;
+	text-align: center;
+	color: white;
+}
+canvas
+{
+	position: absolute;
+	left: 50%;
+	-ms-transform: translate(-50%, -50%);
+	transform: translate(-50%, -50%);
+	border: 2.5px solid white;
+
+}
+.exitbutton
+{
+	display: flex;
+	justify-content: center;
+	width: 100%;
+	text-align:center;
+}
+/* Exit to Google */
+.exitbutton a
+{
+	font-size: 150%;
+	color:black;
+	text-decoration: none;
+	font-family: 'Monofett', 'cursive';
+	transition: all .5s ease-in-out;
+}
+
+/* Change color and size on mouse-over */
+.exitbutton a:hover
+{
+	color: white;
+	transform: scale(1.15);
+}
