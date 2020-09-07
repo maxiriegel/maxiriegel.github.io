@@ -1,6 +1,6 @@
 // Constants
-const GAME_WIDTH = 500;
-const GAME_HEIGHT = 300;
+const GAME_WIDTH = 0.42 * screen.width;
+const GAME_HEIGHT = 0.42 * screen.height;
 const KEY_UP = 38;
 const KEY_DOWN = 40;
 const PADDLE_WIDTH = 10;
