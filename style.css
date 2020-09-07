@@ -17,7 +17,7 @@ body
 	display: flex;
 	justify-content: space-around;
 	width: 100%;
-	margin-bottom: 200px;
+	margin-bottom: 50px;
 }
 
 /* Links inside the row */
@@ -36,6 +36,11 @@ body
 	color: black;
 	transform: scale(1.25);
 }
+.pongcourt
+{
+	margin: 25px;
+}
+
 .instruction
 {
 	
@@ -61,12 +66,10 @@ body
 }
 canvas
 {
-	position: absolute;
-	left: 50%;
-	-ms-transform: translate(-50%, -50%);
-	transform: translate(-50%, -50%);
+	display: block;
+	margin-left: auto;
+	margin-right: auto;
 	border: 2.5px solid white;
-
 }
 .exitbutton
 {
