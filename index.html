@@ -1,3 +1,5 @@
+<!-- this is the html file specifying the website of maxi riegel -->
+
 <!DOCTYPE html>
 
 <html>
@@ -11,6 +13,12 @@
 	</head>
 	
 	<body>
+		<!-- the game is initalized first, so that the other elements are not "painted over" by the canvas -->
+		<div class="pongcourt" id="pongcourt">
+			<script src="pong.js"></script>
+		</div>
+		
+		<!-- row of top links -->
 		<div class="linkrow">
 			<a href="mailto:maximilianluis.riegel@gmail.com">gmail</a>
 			<a href="https://www.linkedin.com/in/maximilianluisriegel/">linkedin</a>
@@ -20,20 +28,12 @@
 			<a href="https://www.facebook.com/profile.php?id=100002462008776">facebook</a>
 		</div>
 		
-		<div class="pongcourt" id="pongcourt">
-			<script src="pong.js"></script>
-		</div>
-		
+		<!-- my name in the center -->
 		<div class="centervisual">
 			Maxi Riegel
 		</div>	
 		
-		<div class="instruction">
-			Use ↑ and ↓ to play
-		</div>
-		
-		<br/>
-		
+		<!-- exit to google -->
 		<div class="exitbutton">
 			<a href="https://www.google.com/">Exit to Google<br>▼</a>
 		</div>
