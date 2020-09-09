@@ -5,8 +5,8 @@ const KEY_UP = 38;
 const KEY_DOWN = 40;
 const PADDLE_WIDTH = 10;
 const PADDLE_HEIGHT = 50;
-const BACKGROUND_COLOUR = "salmon";
-const PLAYER_COLOUR = "#000000";
+const BACKGROUND_COLOUR = "black";
+const PLAYER_COLOUR = "#FE2EF7";
 const COMPUTER_COLOUR = "#FFFFFF"
 const BALL_COLOUR = "red";
 

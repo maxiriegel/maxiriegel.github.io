@@ -8,7 +8,7 @@
 /* specify full page color */
 body
 {
-	background-color: salmon;
+	background-color: black;
 }
 
 /* info on row of links o top */
@@ -28,7 +28,7 @@ body
 .linkrow a
 {
 	font-size: 150%;
-	color:white;
+	color: #FE2EF7;
 	text-decoration: none;
 	font-family: 'Monofett', 'cursive';
 	transition: all .5s ease-in-out;
@@ -37,7 +37,7 @@ body
 /* change color and enlarge actual links on mouse-over */
 .linkrow a:hover
 {
-	color: black;
+	color: yellow;
 	transform: scale(1.25);
 }
 
@@ -100,7 +100,7 @@ canvas
 .exitbutton a
 {
 	font-size: 150%;
-	color:black;
+	color: #FE2EF7;
 	text-decoration: none;
 	font-family: 'Monofett', 'cursive';
 	transition: all .5s ease-in-out;
@@ -109,6 +109,6 @@ canvas
 /* Change color and size on mouse-over */
 .exitbutton a:hover
 {
-	color: white;
+	color: yellow;
 	transform: scale(1.15);
 }
