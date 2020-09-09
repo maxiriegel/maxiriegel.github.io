@@ -1,30 +1,26 @@
-/* this is the css file specifying the website of maxi riegel */
-
-/* import google fonts through web api */
+/* Import Google fonts */
 
 @import url('https://fonts.googleapis.com/css2?family=Bungee&family=Bungee+Hairline&family=Bungee+Inline&family=Bungee+Outline&family=Bungee+Shade&family=Fascinate&family=Kumar+One+Outline&family=Major+Mono+Display&family=Monofett&family=Plaster&display=swap');
 
 
-/* specify full page color */
+/* Full page style info */
 body
 {
 	background-color: salmon;
+	margin: 25px;
 }
 
-/* info on row of links o top */
+/* Info on row of links */
 .linkrow
 {
-	position: fixed;
-	left: 50%;
-	top: 50px;
-	transform: translate(-50%, -50%);
-	margin: 0 auto;
-	width: 90%;
+	position: relative;
 	display: flex;
-	justify-content: space-between;
+	justify-content: space-around;
+	width: 100%;
+	margin-bottom: 50px;
 }
 
-/* specify how the entries/actual links inside the row look like*/
+/* Links inside the row */
 .linkrow a
 {
 	font-size: 150%;
@@ -34,19 +30,17 @@ body
 	transition: all .5s ease-in-out;
 }
 
-/* change color and enlarge actual links on mouse-over */
+/* Change background on mouse-over */
 .linkrow a:hover
 {
 	color: black;
 	transform: scale(1.25);
 }
-
-/* div containing the game canvas */
 .pongcourt
 {
+	margin: 25px;
 }
 
-/* game instructions for pong game */
 .instruction
 {
 	
@@ -58,12 +52,11 @@ body
 	font-family: 'Monofett', 'cursive';
 }
 
-/* text in the page center (my name) */
+
 .centervisual
 {
 	position: absolute;
 	left: 50%;
-	top: 50%;
 	-ms-transform: translate(-50%, -50%);
 	transform: translate(-50%, -50%);
 	font-family: 'Bungee Outline', 'cursive';
@@ -71,32 +64,21 @@ body
 	text-align: center;
 	color: white;
 }
-
-/* actual area/board where the pong is put and played */
 canvas
 {
-	position: absolute;
-	left: 50%;
-	top: 50%;
-	-ms-transform: translate(-50%, -50%);
-	transform: translate(-50%, -50%);
+	display: block;
+	margin-left: auto;
+	margin-right: auto;
 	border: 2.5px solid white;
 }
-
-/* last row with button to google */
 .exitbutton
 {
-	position: fixed;
-	left: 50%;
-	bottom: 0px;
-	transform: translate(-50%, -50%);
-	margin: 0 auto;
-	width: 50%;
 	display: flex;
 	justify-content: center;
-	text-align: center;
+	width: 100%;
+	text-align:center;
 }
-/* change how actual button looks like */
+/* Exit to Google */
 .exitbutton a
 {
 	font-size: 150%;
