@@ -20,7 +20,7 @@
             text-decoration: none;
             margin: 0 15px;
             /* Angepasste Schriftgröße für bessere Lesbarkeit auf allen Geräten */
-            font-size: clamp(0.8rem, 2vw, 1.2rem); 
+            font-size: clamp(1rem, 3vw, 1.5rem); 
             transition: color 0.3s ease;
         }
         #links a:hover {
@@ -829,6 +829,7 @@
             const aspect = window.innerWidth / window.innerHeight;
             let newFov = defaultFov;
             let newCameraOffsetY = 2.5; // Base Y offset for camera
+            let newCameraOffsetZ = 5;   // Base Z offset for camera (distance behind mannequin)
 
             if (aspect < 1) { // Portrait mode (e.g., mobile phones)
                 newFov = defaultFov + (1 - aspect) * 20; // Increase FOV as aspect ratio decreases
@@ -837,18 +838,24 @@
                 // Adjust camera Y offset for portrait mode to look more upwards
                 newCameraOffsetY = 2.5 + (1 - aspect) * 4; // Increase Y offset based on narrowness
                 newCameraOffsetY = Math.min(newCameraOffsetY, 5); // Cap max Y offset
+
+                // Adjust camera Z offset for portrait mode to show more distance
+                newCameraOffsetZ = 5 + (1 - aspect) * 10; // Increase Z offset to pull camera back
+                newCameraOffsetZ = Math.min(newCameraOffsetZ, 15); // Cap max Z offset
             } else { // Landscape or square (e.g., tablets, desktops)
                 newFov = defaultFov; // Keep default FOV
                 newCameraOffsetY = 2.5; // Reset to default Y offset
+                newCameraOffsetZ = 5; // Reset to default Z offset
             }
 
             camera.fov = newFov;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
 
-            // Update the global cameraOffset's y component
+            // Update the global cameraOffset's y and z components
             if (cameraOffset) { // Ensure it's initialized
                 cameraOffset.y = newCameraOffsetY;
+                cameraOffset.z = newCameraOffsetZ;
             }
         }
 
