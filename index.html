@@ -1,42 +1,827 @@
-<!-- this is the html file specifying the website of maxi riegel -->
-
 <!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Surreale Reise</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Inter', sans-serif; }
+        canvas { display: block; }
+        /* #info CSS-Regel wurde entfernt */
+        #links {
+            position: absolute;
+            bottom: 10px;
+            width: 100%;
+            text-align: center;
+            z-index: 100;
+        }
+        #links a {
+            color: white;
+            text-decoration: none;
+            margin: 0 15px;
+            font-size: 14px;
+            transition: color 0.3s ease;
+        }
+        #links a:hover {
+            color: #00ffff; /* Leuchtendes Cyan beim Hover */
+        }
+    </style>
+    <script src="https://ga.jspm.io/npm:es-module-shims@1.6.3/dist/es-module-shims.js"></script>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+</head>
+<body>
+    <div id="links">
+        <a href="https://www.linkedin.com/in/maximilianluisriegel/" target="_blank">LinkedIn</a>
+        <a href="https://github.com/maxiriegel" target="_blank">GitHub</a>
+        <a href="mailto:maximilianluis.riegel@gmail.com">E-Mail</a>
+    </div>
 
-<html>
+    <script type="module">
+        import * as THREE from 'three';
+        import { FontLoader } from 'three/addons/loaders/FontLoader.js';
+        import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 
-	<head>
-		<link rel="stylesheet" href="style.css">
-		<title>
-			🐢 Maxi Riegel | Homepage
-		</title>
-	
-	</head>
-	
-	<body>
-		<!-- the game is initalized first, so that the other elements are not "painted over" by the canvas -->
-		<div class="pongcourt" id="pongcourt">
-			<script src="pong.js"></script>
-		</div>
-		
-		<!-- row of top links -->
-		<div class="linkrow">
-			<a href="mailto:maximilianluis.riegel@gmail.com">gmail</a>
-			<a href="https://www.linkedin.com/in/maximilianluisriegel/">linkedin</a>
-			<a href="https://www.xing.com/profile/MaximilianLuis_Riegel/cv">xing</a>
-			<a href="https://github.com/maxiriegel">github</a>
-			<a href="https://www.instagram.com/1maxi.riegel/">instagram</a>
-			<a href="https://www.facebook.com/profile.php?id=100002462008776">facebook</a>
-		</div>
-		
-		<!-- my name in the center -->
-		<div class="centervisual">
-			Maxi Riegel
-		</div>	
-		
-		<!-- exit to google -->
-		<div class="exitbutton">
-			<a href="https://www.google.com/">Exit to Google<br>▼</a>
-		</div>
-	</body>
+        let scene, camera, renderer;
+        let mannequin;
+        let ground;
+        const clock = new THREE.Clock();
 
+        let mouseX = 0; // Global variable for mouse/touch X-position
+
+        const CHUNK_SIZE = 100; // Size of a city chunk
+        const NUM_CHUNKS = 4; // Number of visible chunks
+        const cityChunks = []; // Array to store chunks
+
+        let font; // Variable to store the loaded font
+
+        // Scene initialization
+        function init() {
+            // Scene
+            scene = new THREE.Scene();
+            scene.fog = new THREE.Fog(0x111111, 10, 70); // Darker fog for dystopian atmosphere
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            // The camera is dynamically positioned and oriented in animate()
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
+
+            // Light
+            const ambientLight = new THREE.AmbientLight(0x101010, 0.2); // Very dark ambient light to emphasize glow
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0); // Slightly less intense direct light
+            directionalLight.position.set(5, 10, 7.5);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 1024;
+            directionalLight.shadow.mapSize.height = 1024;
+            scene.add(directionalLight);
+
+            // Mannequin
+            mannequin = createMannequin();
+            mannequin.position.y = 0.8; // Slightly above ground
+            scene.add(mannequin);
+
+            // Ground
+            const groundGeometry = new THREE.PlaneGeometry(200, 200); // Larger ground
+            const groundMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x1a1a1a, // Dark, metallic ground
+                roughness: 0.7,
+                metalness: 0.5,
+                emissive: new THREE.Color(0x000000), // No emission for the ground
+                emissiveIntensity: 0 // No emission for the ground
+            });
+            ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+            
+            // Generate initial city
+            for (let i = 0; i < NUM_CHUNKS; i++) {
+                // Generate chunks sequentially, starting at 0 and then negative
+                const chunk = generateCityChunk(-i * CHUNK_SIZE); 
+                cityChunks.push(chunk);
+                scene.add(chunk);
+            }
+
+            // Load font
+            const fontLoader = new FontLoader();
+            fontLoader.load('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/fonts/helvetiker_regular.typeface.json', function (loadedFont) {
+                font = loadedFont; // Store the loaded font
+            });
+
+            // Event listener for window resize
+            window.addEventListener('resize', onWindowResize, false);
+            // Event listener for mouse movement
+            window.addEventListener('mousemove', onInputMove, false);
+            // Event listener for touch movement
+            window.addEventListener('touchmove', onInputMove, false);
+
+            animate();
+        }
+
+        // Capture mouse and touch movement
+        function onInputMove(event) {
+            if (event.touches && event.touches.length > 0) {
+                // For touch events
+                mouseX = event.touches[0].clientX;
+            } else {
+                // For mouse events
+                mouseX = event.clientX;
+            }
+        }
+
+        // Creates the mannequin with joints and a more realistic body
+        function createMannequin() {
+            const bodyGroup = new THREE.Group(); // Main group for the entire mannequin
+            const woodMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x8B4513, // Brown for wood
+                roughness: 0.7, 
+                metalness: 0.1 
+            });
+
+            // --- Torso and pelvis ---
+            const pelvisHeight = 0.3;
+            const torsoHeight = 0.8;
+            const bodyWidth = 0.6;
+            const bodyDepth = 0.3;
+
+            const pelvisGeometry = new THREE.BoxGeometry(bodyWidth, pelvisHeight, bodyDepth);
+            const pelvis = new THREE.Mesh(pelvisGeometry, woodMaterial);
+            pelvis.castShadow = true;
+            pelvis.name = "pelvis";
+            bodyGroup.add(pelvis); // Pelvis is the base of the body
+
+            const torsoGeometry = new THREE.BoxGeometry(bodyWidth * 0.9, torsoHeight, bodyDepth * 0.9);
+            const torso = new THREE.Mesh(torsoGeometry, woodMaterial);
+            torso.position.y = pelvisHeight / 2 + torsoHeight / 2; // Position relative to pelvis
+            torso.castShadow = true;
+            torso.name = "torso";
+            pelvis.add(torso); // Torso is child of pelvis
+
+            // --- Head ---
+            const headRadius = 0.25;
+            const head = new THREE.Mesh(new THREE.SphereGeometry(headRadius, 16, 16), woodMaterial);
+            head.position.y = torsoHeight / 2 + headRadius; // Position relative to torso
+            head.castShadow = true;
+            head.name = "head";
+            torso.add(head); // Head is child of torso
+
+            // --- Arms ---
+            const upperArmLength = 0.4;
+            const foreArmLength = 0.4;
+            const armRadius = 0.08;
+
+            // Left arm
+            const leftShoulderPivot = new THREE.Group(); // Shoulder joint
+            leftShoulderPivot.position.set(-bodyWidth / 2, torsoHeight / 2 - 0.1, 0); // Position at shoulder
+            leftShoulderPivot.name = "leftShoulderPivot"; // Name for the pivot
+            torso.add(leftShoulderPivot);
+
+            const leftUpperArm = new THREE.Mesh(new THREE.CylinderGeometry(armRadius, armRadius, upperArmLength, 8), woodMaterial);
+            leftUpperArm.position.y = -upperArmLength / 2; // Position relative to shoulder joint
+            leftUpperArm.castShadow = true;
+            leftUpperArm.name = "leftUpperArm";
+            leftShoulderPivot.add(leftUpperArm);
+
+            const leftElbowPivot = new THREE.Group(); // Elbow joint
+            leftElbowPivot.position.y = -upperArmLength / 2; // Position at the end of the upper arm
+            leftElbowPivot.name = "leftElbowPivot"; // Name for the pivot
+            leftUpperArm.add(leftElbowPivot);
+
+            const leftForeArm = new THREE.Mesh(new THREE.CylinderGeometry(armRadius, armRadius, foreArmLength, 8), woodMaterial);
+            leftForeArm.position.y = -foreArmLength / 2; // Position relative to elbow joint
+            leftForeArm.castShadow = true;
+            leftForeArm.name = "leftForeArm";
+            leftElbowPivot.add(leftForeArm);
+
+            // Right arm (mirrored)
+            const rightShoulderPivot = new THREE.Group();
+            rightShoulderPivot.position.set(bodyWidth / 2, torsoHeight / 2 - 0.1, 0);
+            rightShoulderPivot.name = "rightShoulderPivot"; // Name for the pivot
+            torso.add(rightShoulderPivot);
+
+            const rightUpperArm = new THREE.Mesh(new THREE.CylinderGeometry(armRadius, armRadius, upperArmLength, 8), woodMaterial);
+            rightUpperArm.position.y = -upperArmLength / 2;
+            rightUpperArm.castShadow = true;
+            rightUpperArm.name = "rightUpperArm";
+            rightShoulderPivot.add(rightUpperArm);
+
+            const rightElbowPivot = new THREE.Group();
+            rightElbowPivot.position.y = -upperArmLength / 2;
+            rightElbowPivot.name = "rightElbowPivot"; // Name for the pivot
+            rightUpperArm.add(rightElbowPivot);
+
+            const rightForeArm = new THREE.Mesh(new THREE.CylinderGeometry(armRadius, armRadius, foreArmLength, 8), woodMaterial);
+            rightForeArm.position.y = -foreArmLength / 2;
+            rightForeArm.castShadow = true;
+            rightForeArm.name = "rightForeArm";
+            rightElbowPivot.add(rightForeArm);
+
+            // --- Legs ---
+            const upperLegLength = 0.5;
+            const lowerLegLength = 0.5;
+            const legRadius = 0.1;
+
+            // Left leg
+            const leftHipPivot = new THREE.Group(); // Hip joint
+            leftHipPivot.position.set(-bodyWidth * 0.25, -pelvisHeight / 2, 0); // Position at pelvis
+            leftHipPivot.name = "leftHipPivot"; // Name for the pivot
+            pelvis.add(leftHipPivot);
+
+            const leftUpperLeg = new THREE.Mesh(new THREE.CylinderGeometry(legRadius, legRadius, upperLegLength, 8), woodMaterial);
+            leftUpperLeg.position.y = -upperLegLength / 2; // Position relative to hip joint
+            leftUpperLeg.castShadow = true;
+            leftUpperLeg.name = "leftUpperLeg";
+            leftHipPivot.add(leftUpperLeg);
+
+            const leftKneePivot = new THREE.Group(); // Knee joint
+            leftKneePivot.position.y = -upperLegLength / 2; // Position at the end of the thigh
+            leftKneePivot.name = "leftKneePivot"; // Name for the pivot
+            leftUpperLeg.add(leftKneePivot);
+
+            const leftLowerLeg = new THREE.Mesh(new THREE.CylinderGeometry(legRadius, legRadius, lowerLegLength, 8), woodMaterial);
+            leftLowerLeg.position.y = -lowerLegLength / 2; // Position relative to knee joint
+            leftLowerLeg.castShadow = true;
+            leftLowerLeg.name = "leftLowerLeg";
+            leftKneePivot.add(leftLowerLeg);
+
+            // Right leg (mirrored)
+            const rightHipPivot = new THREE.Group();
+            rightHipPivot.position.set(bodyWidth * 0.25, -pelvisHeight / 2, 0);
+            rightHipPivot.name = "rightHipPivot"; // Name for the pivot
+            pelvis.add(rightHipPivot);
+
+            const rightUpperLeg = new THREE.Mesh(new THREE.CylinderGeometry(legRadius, legRadius, upperLegLength, 8), woodMaterial);
+            rightUpperLeg.position.y = -upperLegLength / 2;
+            rightUpperLeg.castShadow = true;
+            rightUpperLeg.name = "rightUpperLeg";
+            rightHipPivot.add(rightUpperLeg);
+
+            const rightKneePivot = new THREE.Group();
+            rightKneePivot.position.y = -upperArmLength / 2;
+            rightKneePivot.name = "rightKneePivot"; // Name for the pivot
+            rightUpperLeg.add(rightKneePivot);
+
+            const rightLowerLeg = new THREE.Mesh(new THREE.CylinderGeometry(legRadius, legRadius, lowerLegLength, 8), woodMaterial);
+            rightLowerLeg.position.y = -lowerLegLength / 2;
+            rightLowerLeg.castShadow = true;
+            rightLowerLeg.name = "rightLowerLeg";
+            rightKneePivot.add(rightLowerLeg);
+
+            // Scale the entire mannequin
+            bodyGroup.scale.set(0.8, 0.8, 0.8);
+
+            return bodyGroup;
+        }
+
+        // Helper function to determine object dimensions
+        function getObjectDimensions(object) {
+            const geometry = object.geometry;
+            if (geometry.parameters) {
+                if (geometry.parameters.width !== undefined && geometry.parameters.height !== undefined && geometry.parameters.depth !== undefined) {
+                    return {
+                        width: geometry.parameters.width,
+                        height: geometry.parameters.height,
+                        depth: geometry.parameters.depth
+                    };
+                } else if (geometry.parameters.radius !== undefined) { // Sphere, Torus, Octahedron
+                    const r = geometry.parameters.radius * 2;
+                    return { width: r, height: r, depth: r };
+                } else if (geometry.parameters.height !== undefined && (geometry.parameters.radiusTop !== undefined || geometry.parameters.radiusBottom !== undefined)) { // Cylinder, Cone
+                    const r = Math.max(geometry.parameters.radiusTop || 0, geometry.parameters.radiusBottom || 0) * 2;
+                    return { width: r, height: geometry.parameters.height, depth: r };
+                }
+            }
+            // Fallback for custom geometries or missing parameters
+            if (!geometry.boundingBox) {
+                geometry.computeBoundingBox();
+            }
+            const box = geometry.boundingBox;
+            return {
+                width: box.max.x - box.min.x,
+                height: box.max.y - box.min.y,
+                depth: box.max.z - box.min.z
+            };
+        }
+
+        // Adds glowing panels to a building
+        function addGlowingPanels(parentBuilding) {
+            const dimensions = getObjectDimensions(parentBuilding);
+            const numPanels = 1 + Math.floor(Math.random() * 3); // 1 to 3 panels
+            const panelThickness = 0.05; // Very thin panel
+
+            // Original panel colors (not TRON-specific)
+            const panelColors = [0x00ffff, 0xff00ff, 0xffff00, 0x00ff00, 0xff6600, 0x9900ff]; // Cyan, Magenta, Yellow, Green, Orange, Purple
+
+            for (let i = 0; i < numPanels; i++) {
+                const panelColor = new THREE.Color(panelColors[Math.floor(Math.random() * panelColors.length)]);
+                const panelMaterial = new THREE.MeshStandardMaterial({
+                    color: panelColor,
+                    emissive: panelColor,
+                    emissiveIntensity: 1.5 + Math.random() * 1.0 // Strong glow
+                });
+
+                let panelGeometry;
+                let panelPosition = new THREE.Vector3();
+
+                const side = Math.floor(Math.random() * 4); // 0: front, 1: back, 2: left, 3: right
+
+                // Random panel size relative to building surface
+                const panelWidthRatio = 0.2 + Math.random() * 0.5; // 20-70% of building width/depth
+                const panelHeightRatio = 0.2 + Math.random() * 0.5; // 20-70% of building height
+
+                const currentPanelWidth = dimensions.width * panelWidthRatio;
+                const currentPanelHeight = dimensions.height * panelHeightRatio;
+                const currentPanelDepth = dimensions.depth * panelWidthRatio; // For side panels
+
+                switch (side) {
+                    case 0: // Front side (along -Z)
+                        panelGeometry = new THREE.BoxGeometry(currentPanelWidth, currentPanelHeight, panelThickness);
+                        panelPosition.set(
+                            (Math.random() - 0.5) * (dimensions.width - currentPanelWidth), // Random X-position on the surface
+                            (Math.random() - 0.5) * (dimensions.height - currentPanelHeight), // Random Y-position on the surface
+                            -dimensions.depth / 2 - panelThickness / 2 // Directly in front of the surface
+                        );
+                        break;
+                    case 1: // Back side (along +Z)
+                        panelGeometry = new THREE.BoxGeometry(currentPanelWidth, currentPanelHeight, panelThickness);
+                        panelPosition.set(
+                            (Math.random() - 0.5) * (dimensions.width - currentPanelWidth),
+                            (Math.random() - 0.5) * (dimensions.height - currentPanelHeight),
+                            dimensions.depth / 2 + panelThickness / 2
+                        );
+                        break;
+                    case 2: // Left side (along -X)
+                        panelGeometry = new THREE.BoxGeometry(panelThickness, currentPanelHeight, currentPanelDepth);
+                        panelPosition.set(
+                            -dimensions.width / 2 - panelThickness / 2,
+                            (Math.random() - 0.5) * (dimensions.height - currentPanelHeight),
+                            (Math.random() - 0.5) * (dimensions.depth - currentPanelDepth)
+                        );
+                        break;
+                    case 3: // Right side (along +X)
+                        panelGeometry = new THREE.BoxGeometry(panelThickness, currentPanelHeight, currentPanelDepth);
+                        panelPosition.set(
+                            dimensions.width / 2 + panelThickness / 2,
+                            (Math.random() - 0.5) * (dimensions.height - currentPanelHeight),
+                            (Math.random() - 0.5) * (dimensions.depth - currentPanelDepth)
+                        );
+                        break;
+                }
+
+                const panel = new THREE.Mesh(panelGeometry, panelMaterial);
+                panel.position.copy(panelPosition);
+                parentBuilding.add(panel);
+            }
+        }
+
+        // Creates a single 3D text letter
+        function createSingleLetter(char, loadedFont) {
+            const textOptions = {
+                font: loadedFont,
+                size: 8, // Text size
+                height: 1, // Text depth
+                curveSegments: 12,
+                bevelEnabled: true,
+                bevelThickness: 0.3,
+                bevelSize: 0.1,
+                bevelOffset: 0,
+                bevelSegments: 5
+            };
+
+            // Neon colors for letters
+            const neonColors = [0x00ffff, 0xff00ff, 0xffff00, 0x00ff00]; // Cyan, Magenta, Yellow, Green
+            const randomNeonColor = neonColors[Math.floor(Math.random() * neonColors.length)];
+
+            const textMaterial = new THREE.MeshStandardMaterial({
+                color: randomNeonColor, 
+                emissive: randomNeonColor,
+                emissiveIntensity: 2.5 // Strong glow
+            });
+
+            const textGeometry = new TextGeometry(char, textOptions);
+            textGeometry.computeBoundingBox();
+            // Center the origin of the letter for easier placement
+            textGeometry.translate(
+                - (textGeometry.boundingBox.max.x - textGeometry.boundingBox.min.x) / 2,
+                - (textGeometry.boundingBox.max.y - textGeometry.boundingBox.min.y) / 2,
+                - (textGeometry.boundingBox.max.z - textGeometry.boundingBox.min.z) / 2
+            );
+
+            const textMesh = new THREE.Mesh(textGeometry, textMaterial);
+            textMesh.castShadow = true;
+            return textMesh;
+        }
+
+        // Creates a glowing palm tree
+        function createGlowingPalmTree() {
+            const palmTreeGroup = new THREE.Group();
+
+            // Neon colors for palm trees
+            const neonColors = [0x00ffff, 0xff00ff, 0xffff00, 0x00ff00]; // Cyan, Magenta, Yellow, Green
+            const randomNeonColor = neonColors[Math.floor(Math.random() * neonColors.length)];
+
+            const palmMaterial = new THREE.MeshStandardMaterial({
+                color: randomNeonColor,
+                emissive: randomNeonColor,
+                emissiveIntensity: 1.0 + Math.random() * 0.5 // Strong glow
+            });
+
+            // Trunk
+            const trunkHeight = 5 + Math.random() * 3;
+            const trunkRadius = 0.3 + Math.random() * 0.1;
+            const trunkGeometry = new THREE.CylinderGeometry(trunkRadius, trunkRadius * 0.8, trunkHeight, 8);
+            const trunk = new THREE.Mesh(trunkGeometry, palmMaterial);
+            trunk.position.y = trunkHeight / 2;
+            trunk.castShadow = true;
+            palmTreeGroup.add(trunk);
+
+            // Canopy (abstract cones)
+            const numLeaves = 3 + Math.floor(Math.random() * 3);
+            for (let i = 0; i < numLeaves; i++) {
+                const leafHeight = 2 + Math.random() * 1.5;
+                const leafRadius = 0.8 + Math.random() * 0.4;
+                const leafGeometry = new THREE.ConeGeometry(leafRadius, leafHeight, 6);
+                const leaf = new THREE.Mesh(leafGeometry, palmMaterial);
+                
+                leaf.position.y = trunkHeight - 0.5; // Position at top of trunk
+                leaf.rotation.x = Math.PI / 2; // Point outwards
+                leaf.rotation.y = (Math.PI * 2 / numLeaves) * i + Math.random() * 0.5; // Spread around
+                leaf.position.x = Math.sin(leaf.rotation.y) * 0.8;
+                leaf.position.z = Math.cos(leaf.rotation.y) * 0.8;
+
+                leaf.castShadow = true;
+                palmTreeGroup.add(leaf);
+            }
+
+            return palmTreeGroup;
+        }
+
+
+        // Generates a city chunk with buildings, roads, and trees
+        function generateCityChunk(startZ) {
+            const chunkGroup = new THREE.Group();
+            chunkGroup.position.z = startZ; // Position the entire chunk
+            chunkGroup.userData.movingVehicles = []; // Array for vehicles in this chunk
+
+            // Base material for buildings (dark color, transparent)
+            const dystopicMaterialBase = new THREE.MeshStandardMaterial({
+                color: new THREE.Color(0x222222), // Base gray
+                transparent: true,
+                opacity: 0.3, // Semi-transparent
+                roughness: 0.2,
+                metalness: 0.8,
+                emissive: new THREE.Color(0x000000),
+                emissiveIntensity: 0.05 // Base glow for all objects
+            });
+
+            // Building geometries (slightly smaller again)
+            const buildingGeometries = [
+                new THREE.BoxGeometry(3, 8, 3), // Smaller tower
+                new THREE.BoxGeometry(5, 6, 5), // Smaller wider building
+                new THREE.BoxGeometry(2, 10, 2), // Smaller slender tower
+                new THREE.BoxGeometry(6, 5, 6), // Smaller flat block
+                new THREE.CylinderGeometry(2, 2, 9, 8), // Smaller cylindrical tower
+                new THREE.CylinderGeometry(1.5, 2.5, 6, 6), // Smaller conical tower
+                new THREE.OctahedronGeometry(4) // Smaller abstract shape
+            ];
+
+            // Increase the number of buildings per chunk
+            const numBuildingsPerChunk = 40 + Math.floor(Math.random() * 15); // 40-54 buildings
+            const buildingMarginFromRoad = 10; // Minimum distance of buildings from road edges
+
+            // Roads (long strips running through the chunk)
+            const roadMaterial = new THREE.MeshStandardMaterial({
+                color: 0x050505, // Very dark gray
+                roughness: 0.9,
+                metalness: 0.1,
+                emissive: new THREE.Color(0x000000),
+                emissiveIntensity: 0 // No emission for the road itself
+            });
+
+            // Road markings
+            const roadStripeMaterial = new THREE.MeshStandardMaterial({
+                color: 0x555555, // Light lines
+                emissive: new THREE.Color(0x555555),
+                emissiveIntensity: 0.2 // Slight emission for lines
+            });
+
+            const numRoads = 3; // Number of roads per chunk
+            const roadWidth = 8; // Road width
+            const roadLength = CHUNK_SIZE * 1.2; // Road length (should exceed chunk size)
+            const roadStripeWidth = 0.2;
+            const roadStripeLength = 5;
+            const roadStripeGap = 5;
+
+            const roadXPositions = []; // Stores the X-positions of the roads
+            for (let i = 0; i < numRoads; i++) {
+                const roadX = (i - numRoads / 2) * (CHUNK_SIZE / numRoads) * 1.5; // Distributed along the X-axis
+                roadXPositions.push(roadX);
+
+                const road = new THREE.Mesh(new THREE.BoxGeometry(roadWidth, 0.1, roadLength), roadMaterial);
+                road.position.set(roadX, 0.05, 0); // Slightly above ground, centered in chunk
+                road.receiveShadow = true;
+                chunkGroup.add(road);
+
+                // Road markings
+                for (let j = -roadLength / 2; j < roadLength / 2; j += roadStripeLength + roadStripeGap) {
+                    const stripe = new THREE.Mesh(new THREE.BoxGeometry(roadStripeWidth, 0.11, roadStripeLength), roadStripeMaterial);
+                    stripe.position.set(roadX, road.position.y + 0.01, j); // Relative Z-position to chunk
+                    chunkGroup.add(stripe);
+                }
+
+                // Vehicles on the roads
+                const numVehicles = 2 + Math.floor(Math.random() * 3); // 2-4 vehicles per road
+                const vehicleMaterial = new THREE.MeshStandardMaterial({
+                    color: new THREE.Color(0x000000), // Base dark
+                    emissive: new THREE.Color(Math.random() > 0.5 ? 0x00ffff : 0xff00ff), // Neon color (Cyan or Magenta)
+                    emissiveIntensity: 1.5 + Math.random() * 0.5 // Strong glow
+                });
+                const vehicleGeometry = new THREE.BoxGeometry(1.5, 0.3, 0.8); // Flat cuboid
+
+                for (let k = 0; k < numVehicles; k++) {
+                    const vehicle = new THREE.Mesh(vehicleGeometry, vehicleMaterial.clone()); // Clone for individual colors
+                    vehicle.position.set(
+                        roadX,
+                        road.position.y + 0.15, // Above the road
+                        (Math.random() - 0.5) * roadLength // Random starting position on the road
+                    );
+                    vehicle.castShadow = true;
+                    chunkGroup.add(vehicle);
+                    chunkGroup.userData.movingVehicles.push(vehicle); // Add vehicle to chunk
+                }
+            }
+
+
+            for (let i = 0; i < numBuildingsPerChunk; i++) { 
+                const geometry = buildingGeometries[Math.floor(Math.random() * buildingGeometries.length)];
+                const buildingMaterial = dystopicMaterialBase.clone(); 
+
+                // Random color variation for the main body (dark)
+                const baseColor = new THREE.Color();
+                const rand = Math.random();
+                if (rand < 0.3) { baseColor.setHex(0x222222); }
+                else if (rand < 0.6) { baseColor.setHex(0x1a1a3a); }
+                else if (rand < 0.8) { baseColor.setHex(0x3a1a3a); }
+                else { baseColor.setHex(0x444455); }
+                baseColor.r = Math.max(0, Math.min(1, baseColor.r + (Math.random() - 0.5) * 0.1));
+                baseColor.g = Math.max(0, Math.min(1, baseColor.g + (Math.random() - 0.5) * 0.1));
+                baseColor.b = Math.max(0, Math.min(1, baseColor.b + (Math.random() - 0.5) * 0.1));
+                buildingMaterial.color.copy(baseColor);
+                buildingMaterial.emissiveIntensity = 0.05; // Base glow
+
+                const building = new THREE.Mesh(geometry, buildingMaterial);
+                
+                // Position buildings away from roads
+                let buildingX;
+                let attempts = 0;
+                const maxAttempts = 20;
+                do {
+                    buildingX = (Math.random() - 0.5) * (CHUNK_SIZE * 0.8); // Random X-position in chunk
+                    let onRoadOrTooClose = false;
+                    for (const roadX of roadXPositions) {
+                        // Check if the building is too close to a road
+                        if (buildingX > roadX - roadWidth / 2 - buildingMarginFromRoad && 
+                            buildingX < roadX + roadWidth / 2 + buildingMarginFromRoad) {
+                            onRoadOrTooClose = true;
+                            break;
+                        }
+                    }
+                    if (!onRoadOrTooClose) break;
+                    attempts++;
+                } while (attempts < maxAttempts);
+
+                building.position.set(
+                    buildingX,
+                    (geometry.parameters.height ? geometry.parameters.height : (geometry.parameters.radius !== undefined ? geometry.parameters.radius * 2 : 1)) / 2,
+                    (Math.random() - 0.5) * (CHUNK_SIZE * 0.8)
+                );
+                building.rotation.set(0, Math.random() * Math.PI * 2, 0); // Y-rotation only
+                building.castShadow = true;
+                chunkGroup.add(building);
+
+                // Add glowing panels
+                if (Math.random() < 0.6) { // 60% chance for glowing panels
+                    addGlowingPanels(building);
+                }
+            }
+
+            // Trees (abstract shapes)
+            const treeMaterial = dystopicMaterialBase.clone();
+            treeMaterial.color.setHex(0x333333); // Dark gray for trees
+            treeMaterial.roughness = 0.5;
+            treeMaterial.metalness = 0.5;
+            treeMaterial.emissive = new THREE.Color(0x000000); // No emission for trees
+            treeMaterial.emissiveIntensity = 0.1; // Base glow for trees
+            treeMaterial.transparent = false; // Not transparent
+            treeMaterial.opacity = 1; // Full opacity
+
+            const numTrees = 10;
+            for (let i = 0; i < numTrees; i++) {
+                const treeGroup = new THREE.Group();
+                const trunkHeight = 2 + Math.random() * 2;
+                const trunkRadius = 0.1 + Math.random() * 0.05;
+                const trunk = new THREE.Mesh(new THREE.CylinderGeometry(trunkRadius, trunkRadius, trunkHeight, 8), treeMaterial);
+                trunk.position.y = trunkHeight / 2;
+                trunk.castShadow = true;
+                treeGroup.add(trunk);
+
+                const canopyHeight = 1 + Math.random() * 1.5;
+                const canopyRadius = 0.5 + Math.random() * 0.3;
+                const canopy = new THREE.Mesh(new THREE.ConeGeometry(canopyRadius, canopyHeight, 8), treeMaterial);
+                canopy.position.y = trunkHeight + canopyHeight / 2 - 0.2; // Slightly overlapping
+                canopy.castShadow = true;
+                treeGroup.add(canopy);
+
+                let treeX;
+                let treeAttempts = 0;
+                const maxTreeAttempts = 20;
+                do {
+                    treeX = (Math.random() - 0.5) * (CHUNK_SIZE * 0.8);
+                    let onRoadOrTooClose = false;
+                    for (const roadX of roadXPositions) {
+                        if (treeX > roadX - roadWidth / 2 - buildingMarginFromRoad && 
+                            treeX < roadX + roadWidth / 2 + buildingMarginFromRoad) {
+                            onRoadOrTooClose = true;
+                            break;
+                        }
+                    }
+                    if (!onRoadOrTooClose) break;
+                    treeAttempts++;
+                } while (treeAttempts < maxTreeAttempts);
+
+                treeGroup.position.set(
+                    treeX,
+                    0, // Base on the ground
+                    (Math.random() - 0.5) * (CHUNK_SIZE * 0.8)
+                );
+                treeGroup.rotation.y = Math.random() * Math.PI * 2;
+                chunkGroup.add(treeGroup);
+            }
+
+            // Add glowing palm trees
+            const numPalmTrees = 2 + Math.floor(Math.random() * 3); // 2-4 palm trees per chunk
+            for (let i = 0; i < numPalmTrees; i++) {
+                const palmTree = createGlowingPalmTree();
+                let palmTreeX;
+                let palmTreeAttempts = 0;
+                const maxPalmTreeAttempts = 20;
+                do {
+                    palmTreeX = (Math.random() - 0.5) * (CHUNK_SIZE * 0.8);
+                    let onRoadOrTooClose = false;
+                    for (const roadX of roadXPositions) {
+                        if (palmTreeX > roadX - roadWidth / 2 - buildingMarginFromRoad && 
+                            palmTreeX < roadX + roadWidth / 2 + buildingMarginFromRoad) {
+                            onRoadOrTooClose = true;
+                            break;
+                        }
+                    }
+                    if (!onRoadOrTooClose) break;
+                    palmTreeAttempts++;
+                } while (palmTreeAttempts < maxPalmTreeAttempts);
+
+                palmTree.position.set(
+                    palmTreeX,
+                    0, // Base on the ground
+                    (Math.random() - 0.5) * (CHUNK_SIZE * 0.8)
+                );
+                palmTree.rotation.y = Math.random() * Math.PI * 2;
+                chunkGroup.add(palmTree);
+            }
+
+
+            // Add a random MAXI letter
+            if (font && Math.random() < 0.15) { // 15% chance to add a letter
+                const letters = ['M', 'A', 'X', 'I'];
+                const randomLetterChar = letters[Math.floor(Math.random() * letters.length)];
+                
+                const letterMesh = createSingleLetter(randomLetterChar, font);
+
+                // Choose a random road to place the letter on
+                const randomRoadIndex = Math.floor(Math.random() * numRoads);
+                const targetRoadX = roadXPositions[randomRoadIndex];
+
+                // Determine the actual height of the letter after geometry creation
+                letterMesh.geometry.computeBoundingBox();
+                const letterActualHeight = letterMesh.geometry.boundingBox.max.y - letterMesh.geometry.boundingBox.min.y;
+
+                // Place the letter on the selected road
+                letterMesh.position.set(
+                    targetRoadX,
+                    letterActualHeight / 2 + 0.1, // Half its height plus a small offset above the road
+                    (Math.random() - 0.5) * roadLength // Random Z-position along the road
+                );
+                chunkGroup.add(letterMesh);
+            }
+
+            return chunkGroup;
+        }
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+            const elapsedTime = clock.getElapsedTime();
+
+            // Mannequin animation (walking with joints)
+            const walkSpeed = 4; // Walking cycle speed
+            const legSwingAngle = 0.6; // Maximum leg swing angle
+            const armSwingAngle = 0.5; // Maximum arm swing angle
+            const kneeBendAngle = 0.3; // Knee bend
+            const elbowBendAngle = 0.3; // Elbow bend
+
+            // Legs swing
+            mannequin.getObjectByName('leftHipPivot').rotation.x = Math.sin(elapsedTime * walkSpeed) * legSwingAngle;
+            mannequin.getObjectByName('rightHipPivot').rotation.x = Math.sin(elapsedTime * walkSpeed + Math.PI) * legSwingAngle;
+
+            // Knee bend (slightly delayed and opposite to hip)
+            mannequin.getObjectByName('leftKneePivot').rotation.x = Math.sin(elapsedTime * walkSpeed * 1.2 + Math.PI * 0.5) * kneeBendAngle;
+            mannequin.getObjectByName('rightKneePivot').rotation.x = Math.sin(elapsedTime * walkSpeed * 1.2 + Math.PI * 1.5) * kneeBendAngle;
+
+
+            // Arms swing
+            mannequin.getObjectByName('leftShoulderPivot').rotation.x = Math.sin(elapsedTime * walkSpeed + Math.PI) * armSwingAngle;
+            mannequin.getObjectByName('rightShoulderPivot').rotation.x = Math.sin(elapsedTime * walkSpeed) * armSwingAngle;
+
+            // Elbow bend
+            mannequin.getObjectByName('leftElbowPivot').rotation.x = Math.sin(elapsedTime * walkSpeed * 1.2) * elbowBendAngle;
+            mannequin.getObjectByName('rightElbowPivot').rotation.x = Math.sin(elapsedTime * walkSpeed * 1.2 + Math.PI) * elbowBendAngle;
+
+            // Slight up and down movement of the torso
+            mannequin.getObjectByName('pelvis').position.y = Math.sin(elapsedTime * walkSpeed * 2) * 0.05;
+
+            // Rotate mannequin based on mouse/touch X-position
+            const normalizedInputX = (mouseX / window.innerWidth) * 2 - 1; // Input X from -1 to 1
+            const targetRotationY = -normalizedInputX * (Math.PI / 4); // Maximum 45 degree rotation
+            mannequin.rotation.y += (targetRotationY - mannequin.rotation.y) * 0.05; // Smooth interpolation
+
+            // Move mannequin forward
+            const mannequinSpeed = 0.1; // Mannequin speed
+            const forwardVector = new THREE.Vector3(0, 0, -1); // Default forward direction of mannequin is -Z
+            forwardVector.applyQuaternion(mannequin.quaternion); // Apply current mannequin rotation
+            forwardVector.y = 0; // Movement only on the horizontal plane
+            forwardVector.normalize(); // Normalize vector
+            mannequin.position.add(forwardVector.multiplyScalar(mannequinSpeed));
+
+            // Camera follows mannequin
+            const cameraOffset = new THREE.Vector3(0, 2.5, 5); // Offset behind mannequin
+            cameraOffset.applyQuaternion(mannequin.quaternion); // Rotate offset with mannequin rotation
+            camera.position.copy(mannequin.position).add(cameraOffset);
+            camera.lookAt(mannequin.position.x, mannequin.position.y + 1, mannequin.position.z); // Camera looks at mannequin
+
+            // Chunk recycling logic
+            const firstChunk = cityChunks[0];
+            // If the first chunk is too far behind the mannequin, recycle it
+            if (mannequin.position.z < firstChunk.position.z - (CHUNK_SIZE / 2)) {
+                const oldChunk = cityChunks.shift(); // Remove the oldest chunk
+                scene.remove(oldChunk); // Remove it from the scene
+
+                const lastChunk = cityChunks[cityChunks.length - 1];
+                const newChunkZ = lastChunk.position.z - CHUNK_SIZE; // New Z-position for the new chunk
+                const newChunk = generateCityChunk(newChunkZ); // Generate a new chunk
+                cityChunks.push(newChunk); // Add it to the end
+                scene.add(newChunk); // Add it to the scene
+            }
+
+            // Animate vehicles in chunks
+            const vehicleSpeed = 0.5; // Vehicle speed
+            cityChunks.forEach(chunk => {
+                chunk.userData.movingVehicles.forEach(vehicle => {
+                    // Move the vehicle relative to the chunk's Z-position
+                    // The vehicle's Z-position is relative to the chunk.
+                    // To simulate movement in the world, we need to adjust it based on the chunk's Z-position.
+                    // If the vehicle reaches the end of the chunk, reset it to the beginning.
+                    vehicle.position.z += vehicleSpeed * delta; 
+                    if (vehicle.position.z > CHUNK_SIZE / 2) {
+                        vehicle.position.z -= CHUNK_SIZE; // Reset it to the beginning of the chunk
+                    }
+                });
+            });
+            
+            renderer.render(scene, camera);
+        }
+
+        // Window resize
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        init();
+    </script>
+</body>
 </html>
