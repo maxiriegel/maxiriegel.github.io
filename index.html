@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Surreale Reise</title>
+    <title>💀 Homepage | Maxi Riegel</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Inter', sans-serif; }
         canvas { display: block; }
@@ -19,7 +19,8 @@
             color: white;
             text-decoration: none;
             margin: 0 15px;
-            font-size: 14px;
+            /* Angepasste Schriftgröße für bessere Lesbarkeit auf allen Geräten */
+            font-size: clamp(0.8rem, 2vw, 1.2rem); 
             transition: color 0.3s ease;
         }
         #links a:hover {
@@ -60,6 +61,7 @@
         const cityChunks = []; // Array to store chunks
 
         let font; // Variable to store the loaded font
+        let cameraOffset; // Global variable for camera offset
 
         // Scene initialization
         function init() {
@@ -116,6 +118,9 @@
                 scene.add(chunk);
             }
 
+            // Initialize camera offset
+            cameraOffset = new THREE.Vector3(0, 2.5, 5);
+
             // Load font
             const fontLoader = new FontLoader();
             fontLoader.load('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/fonts/helvetiker_regular.typeface.json', function (loadedFont) {
@@ -128,6 +133,9 @@
             window.addEventListener('mousemove', onInputMove, false);
             // Event listener for touch movement
             window.addEventListener('touchmove', onInputMove, false);
+
+            // Initial call to set camera properties correctly
+            onWindowResize();
 
             animate();
         }
@@ -777,9 +785,9 @@
             mannequin.position.add(forwardVector.multiplyScalar(mannequinSpeed));
 
             // Camera follows mannequin
-            const cameraOffset = new THREE.Vector3(0, 2.5, 5); // Offset behind mannequin
-            cameraOffset.applyQuaternion(mannequin.quaternion); // Rotate offset with mannequin rotation
-            camera.position.copy(mannequin.position).add(cameraOffset);
+            const currentCameraOffset = cameraOffset.clone(); // Clone to avoid modifying the original
+            currentCameraOffset.applyQuaternion(mannequin.quaternion); // Rotate offset with mannequin rotation
+            camera.position.copy(mannequin.position).add(currentCameraOffset);
             camera.lookAt(mannequin.position.x, mannequin.position.y + 1, mannequin.position.z); // Camera looks at mannequin
 
             // Chunk recycling logic
@@ -820,15 +828,28 @@
             const defaultFov = 75;
             const aspect = window.innerWidth / window.innerHeight;
             let newFov = defaultFov;
-            if (aspect < 1) { // Portrait mode
+            let newCameraOffsetY = 2.5; // Base Y offset for camera
+
+            if (aspect < 1) { // Portrait mode (e.g., mobile phones)
                 newFov = defaultFov + (1 - aspect) * 20; // Increase FOV as aspect ratio decreases
                 newFov = Math.min(newFov, 95); // Cap the max FOV to avoid extreme distortion
-            } else { // Landscape or square
+
+                // Adjust camera Y offset for portrait mode to look more upwards
+                newCameraOffsetY = 2.5 + (1 - aspect) * 4; // Increase Y offset based on narrowness
+                newCameraOffsetY = Math.min(newCameraOffsetY, 5); // Cap max Y offset
+            } else { // Landscape or square (e.g., tablets, desktops)
                 newFov = defaultFov; // Keep default FOV
+                newCameraOffsetY = 2.5; // Reset to default Y offset
             }
+
             camera.fov = newFov;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
+
+            // Update the global cameraOffset's y component
+            if (cameraOffset) { // Ensure it's initialized
+                cameraOffset.y = newCameraOffsetY;
+            }
         }
 
         init();
