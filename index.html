@@ -5,283 +5,274 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>🤖 Homepage | Maxi Riegel</title>
   <style>
-    body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Inter', sans-serif; }
-    canvas { display: block; }
-    #links {
-      position: absolute;
-      bottom: 10px;
-      width: 100%;
-      text-align: center;
-      z-index: 100;
-    }
-    #links a {
-      color: white;
-      text-decoration: none;
-      margin: 0 15px;
-      font-size: clamp(1rem, 3vw, 1.5rem); 
-      transition: color 0.3s ease;
-    }
-    #links a:hover {
-      color: #00ffff;
-    }
+    body{margin:0;overflow:hidden;background:#000;font-family:'Inter',sans-serif}
+    canvas{display:block}
+    #links{position:absolute;bottom:10px;width:100%;text-align:center;z-index:100}
+    #links a{color:#fff;text-decoration:none;margin:0 15px;font-size:clamp(1rem,3vw,1.5rem);transition:color .3s}
+    #links a:hover{color:#0ff}
   </style>
+
   <script async src="https://ga.jspm.io/npm:es-module-shims@1.6.3/dist/es-module-shims.js"></script>
   <script type="importmap">
-    {
-      "imports": {
-        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
-      }
-    }
+    { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
   </script>
 </head>
 <body>
   <div id="links">
     <a href="https://www.linkedin.com/in/maximilianluisriegel/" target="_blank">LinkedIn</a>
-    <a href="https://github.com/maxiriegel" target="_blank">GitHub</a>
+    <a href="https://github.com/maxiriegel"                     target="_blank">GitHub</a>
     <a href="mailto:maximilianluis.riegel@gmail.com">E-Mail</a>
   </div>
 
   <script type="module">
     import * as THREE from 'three';
 
-    let scene, camera, renderer, robot;
-    const clock = new THREE.Clock();
-    let mouseX = window.innerWidth / 2;
+    /* --- Konstanten --- */
+    const CHUNK_SIZE    = 200, ROBOT_SPEED = 12, ACTIVE_RADIUS = 2;
+    const LASER_SP      = 60,  LASER_R = 0.08, LASER_COL = 0xff6600;
+    const NPC_COUNT     = 60,  NPC_SPEED = 2.0;                 // ↑ dichter
+    const isMobile      = /Mobi|Android/i.test(navigator.userAgent);
+    const MAX_RATIO     = innerWidth>2000?1.5:2, INPUT_S=isMobile?0.4:1.0;
+    const BLD_PER       = isMobile?40:70;
 
-    const CHUNK_SIZE = 200;
-    const ROBOT_SPEED = 12.0;
-    const ACTIVE_RADIUS = 2;
+    /* --- Globals --- */
+    let scene,camera,renderer,player;
+    let camOffset,lookY=2;
+    const clock=new THREE.Clock();
+    let mouseX=innerWidth/2;
+    const beams=[], npcs=[], explosions=[];
+    const gChunks=new Map(), bChunks=new Map(), active=new Set();
+    const key=(x,z)=>`${x},${z}`;
 
-    let cameraOffset;
+    /* --- Init --- */
+    init(); animate();
 
-    const gridChunks = new Map();
-    const buildingChunks = new Map();
-    const activeChunkSet = new Set();
+    function init(){
+      scene=new THREE.Scene();
+      scene.background=new THREE.Color(0x0a0a1a);
+      scene.fog=new THREE.Fog(scene.background,30,120);
 
-    function chunkKey(x, z) {
-      return `${x},${z}`;
-    }
+      camera=new THREE.PerspectiveCamera(75,1,0.1,1000);
+      camOffset=new THREE.Vector3(0,3,7);
 
-    function init() {
-      scene = new THREE.Scene();
-      scene.background = new THREE.Color(0x0a0a1a);
-      scene.fog = new THREE.Fog(scene.background, 30, 120);
-
-      camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-      cameraOffset = new THREE.Vector3(0, 3, 7);
-
-      renderer = new THREE.WebGLRenderer({ antialias: true });
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.setPixelRatio(window.devicePixelRatio);
-      renderer.shadowMap.enabled = true;
-      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer=new THREE.WebGLRenderer({antialias:true});
+      renderer.setSize(innerWidth,innerHeight);
+      renderer.setPixelRatio(Math.min(devicePixelRatio,MAX_RATIO));
+      renderer.shadowMap.enabled=!isMobile;
       document.body.appendChild(renderer.domElement);
 
-      const hemisphereLight = new THREE.HemisphereLight(0x4a4a9a, 0xff00ff, 1.0);
-      scene.add(hemisphereLight);
+      scene.add(new THREE.HemisphereLight(0x4a4a9a,0xff00ff,1));
+      const sun=new THREE.DirectionalLight(0xffffff,1.5);
+      sun.position.set(10,20,15); sun.castShadow=!isMobile;
+      if(!isMobile) sun.shadow.mapSize.set(2048,2048);
+      scene.add(sun);
 
-      const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
-      directionalLight.position.set(10, 20, 15);
-      directionalLight.castShadow = true;
-      directionalLight.shadow.mapSize.width = 2048;
-      directionalLight.shadow.mapSize.height = 2048;
-      scene.add(directionalLight);
+      player=makeRobot();
+      scene.add(player);
 
-      robot = createRobot();
-      scene.add(robot);
+      /* NPCs: zufällige Skalierung & größere Dichte */
+      for(let i=0;i<NPC_COUNT;i++){
+        const n=makeRobot();
+        const s=0.7+Math.random()*2.3;            // 0.7 … 3.0 ×
+        n.scale.set(s,s,s);
+        n.userData.hit=s*1.2;                     // Hit-Radius proportional
+        n.position.set((Math.random()-.5)*CHUNK_SIZE*3,1.7,(Math.random()-.5)*CHUNK_SIZE*3);
+        n.rotation.y=Math.random()*Math.PI*2;
+        n.userData.speed=NPC_SPEED;
 
-      window.addEventListener('resize', onWindowResize, false);
-      window.addEventListener('mousemove', onInputMove, false);
-      window.addEventListener('touchmove', onInputMove, { passive: false });
+        const beacon=new THREE.PointLight(0xff00ff,0.8,30,2);
+        beacon.position.set(0,2*s,0);             // höher bei großen NPCs
+        n.add(beacon); n.userData.beacon=beacon;
+        n.userData.phase=Math.random()*Math.PI*2;
 
-      onWindowResize();
-      animate();
-    }
-
-    function createRobot() {
-      const robotGroup = new THREE.Group();
-      const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x555566, metalness: 0.9, roughness: 0.4 });
-      const jointMaterial = new THREE.MeshStandardMaterial({ color: 0x9999aa, metalness: 1.0, roughness: 0.2 });
-      const ledMaterial = new THREE.MeshStandardMaterial({ color: 0x00ffff, emissive: 0x00ffff, emissiveIntensity: 2 });
-
-      const createPart = (geometry, material = bodyMaterial) => {
-        const mesh = new THREE.Mesh(geometry, material);
-        mesh.castShadow = true;
-        return mesh;
-      };
-
-      const torso = createPart(new THREE.BoxGeometry(0.8, 1.2, 0.5));
-      torso.name = "torso";
-      robotGroup.add(torso);
-
-      const head = createPart(new THREE.SphereGeometry(0.4, 16, 12));
-      head.position.y = 1.0;
-      torso.add(head);
-
-      const antennaBase = createPart(new THREE.CylinderGeometry(0.05, 0.05, 0.1), jointMaterial);
-      antennaBase.position.y = 0.4;
-      head.add(antennaBase);
-      const antennaStick = createPart(new THREE.CylinderGeometry(0.02, 0.02, 0.5), bodyMaterial);
-      antennaStick.position.y = 0.3;
-      antennaBase.add(antennaStick);
-      const antennaTip = createPart(new THREE.SphereGeometry(0.04), ledMaterial);
-      antennaTip.position.y = 0.25;
-      antennaStick.add(antennaTip);
-
-      // Arme und Beine mit Gelenken
-      const limb = (side, yOffset) => {
-        const group = new THREE.Group();
-        const shoulder = createPart(new THREE.SphereGeometry(0.15), jointMaterial);
-        shoulder.position.set(side * 0.5, yOffset, 0);
-        group.add(shoulder);
-
-        const upper = createPart(new THREE.CylinderGeometry(0.1, 0.1, 0.7));
-        upper.position.y = -0.35;
-        shoulder.add(upper);
-
-        const elbow = createPart(new THREE.SphereGeometry(0.12), jointMaterial);
-        elbow.position.y = -0.35;
-        upper.add(elbow);
-
-        const lower = createPart(new THREE.CylinderGeometry(0.1, 0.1, 0.6));
-        lower.position.y = -0.3;
-        elbow.add(lower);
-
-        return { group, shoulder, upper, elbow, lower };
-      };
-
-      // Arme
-      const leftArm = limb(1, 0.4);
-      const rightArm = limb(-1, 0.4);
-      torso.add(leftArm.group);
-      torso.add(rightArm.group);
-
-      // Beine
-      const leftLeg = limb(0.25, -0.75);
-      const rightLeg = limb(-0.25, -0.75);
-      torso.add(leftLeg.group);
-      torso.add(rightLeg.group);
-
-      robotGroup.userData = { leftArm, rightArm, leftLeg, rightLeg };
-      robotGroup.position.y = 1.7;
-      return robotGroup;
-    }
-
-    function generateGridChunk(chunkX, chunkZ) {
-      const grid = new THREE.GridHelper(CHUNK_SIZE * 2, 20, 0x00ffff, 0x5500ff);
-      grid.position.set(chunkX * CHUNK_SIZE, -0.01, chunkZ * CHUNK_SIZE);
-      scene.add(grid);
-      gridChunks.set(chunkKey(chunkX, chunkZ), grid);
-    }
-
-    function generateCityChunk(chunkX, chunkZ) {
-      const chunkGroup = new THREE.Group();
-      chunkGroup.position.set(chunkX * CHUNK_SIZE, 0, chunkZ * CHUNK_SIZE);
-
-      const numBuildings = 70;
-      const roadWidth = 20;
-      const positions = [];
-
-      const buildingFillMaterial = new THREE.MeshBasicMaterial({ color: 0x050510, transparent: true, opacity: 0.3 });
-      const neonColors = [0x00ffff, 0xff00ff, 0x00ff00, 0xffff00, 0xff6600, 0xff0000];
-
-      for (let i = 0; i < numBuildings; i++) {
-        const width = 8 + Math.random() * 15;
-        const depth = 8 + Math.random() * 15;
-        const height = 20 + Math.random() * 80;
-
-        let tries = 0, finalX, finalZ, posValid = false;
-        while (!posValid && tries++ < 50) {
-          const x = (Math.random() - 0.5) * (CHUNK_SIZE * 1.5 - roadWidth);
-          const z = (Math.random() - 0.5) * CHUNK_SIZE;
-          finalX = x > 0 ? x + roadWidth / 2 : x - roadWidth / 2;
-          finalZ = z;
-          const box = new THREE.Box3().setFromCenterAndSize(new THREE.Vector3(finalX, 0, finalZ), new THREE.Vector3(width, 1, depth));
-          posValid = !positions.some(p => box.intersectsBox(p));
-        }
-        if (!posValid) continue;
-        positions.push(new THREE.Box3().setFromCenterAndSize(new THREE.Vector3(finalX, 0, finalZ), new THREE.Vector3(width, 1, depth)));
-
-        const buildingGeometry = new THREE.BoxGeometry(width, height, depth);
-        const buildingFill = new THREE.Mesh(buildingGeometry, buildingFillMaterial);
-        const edges = new THREE.EdgesGeometry(buildingGeometry);
-        const outline = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: neonColors[Math.floor(Math.random() * neonColors.length)] }));
-        buildingFill.add(outline);
-        buildingFill.position.set(finalX, height / 2, finalZ);
-        chunkGroup.add(buildingFill);
+        scene.add(n); npcs.push(n);
       }
-      scene.add(chunkGroup);
-      buildingChunks.set(chunkKey(chunkX, chunkZ), chunkGroup);
+
+      addEventListener('mousemove',e=>mouseMove(e.clientX),false);
+      addEventListener('touchmove',e=>{e.preventDefault();mouseMove(e.touches[0].clientX)},{passive:false});
+      addEventListener('click',shoot,false);
+      addEventListener('touchstart',e=>{e.preventDefault();shoot()},{passive:false});
+      addEventListener('resize',onResize,false);
+      onResize();
     }
 
-    function onInputMove(e) {
-      e.preventDefault();
-      mouseX = e.touches ? e.touches[0].clientX : e.clientX;
-if (mouseX <= 5) mouseX = -Infinity;
-else if (mouseX >= window.innerWidth - 5) mouseX = Infinity;
+    /* --- Robot Factory --- */
+    function makeRobot(){
+      const body = new THREE.MeshStandardMaterial({color:0x555566,metalness:.9,roughness:.4});
+      const joint= new THREE.MeshStandardMaterial({color:0x9999aa,metalness:1,roughness:.2});
+      const led  = new THREE.MeshStandardMaterial({color:0x00ffff,emissive:0x00ffff,emissiveIntensity:2});
+      const m=(g,mat=body)=>{const mesh=new THREE.Mesh(g,mat);mesh.castShadow=true;return mesh;};
+
+      const g=new THREE.Group();
+      const torso=m(new THREE.BoxGeometry(.8,1.2,.5)); g.add(torso);
+
+      const head=m(new THREE.SphereGeometry(.4,12,8)); head.position.y=1; torso.add(head);
+      const stick=m(new THREE.CylinderGeometry(.02,.02,.5,6),body); stick.position.y=.7; head.add(stick);
+      const tip=m(new THREE.SphereGeometry(.04,6,4),led); tip.position.y=.25; stick.add(tip);
+
+      const limb=(s,y)=>{
+        const grp=new THREE.Group();
+        const sh=m(new THREE.SphereGeometry(.15,8,6),joint); sh.position.set(s*.5,y,0); grp.add(sh);
+        const up=m(new THREE.CylinderGeometry(.1,.1,.7,6));  up.position.y=-.35; sh.add(up);
+        const lo=m(new THREE.CylinderGeometry(.1,.1,.6,6));  lo.position.y=-.95; up.add(lo);
+        return{grp,up,lo};
+      };
+      const la=limb( 1,.4), ra=limb(-1,.4), ll=limb(.25,-.75), rl=limb(-.25,-.75);
+      torso.add(la.grp,ra.grp,ll.grp,rl.grp);
+
+      g.userData={tip,leftArm:la,rightArm:ra,leftLeg:ll,rightLeg:rl};
+      g.position.y=1.7;
+      return g;
     }
 
-    function onWindowResize() {
-      const aspect = window.innerWidth / window.innerHeight;
-      camera.aspect = aspect;
-      camera.fov = aspect < 1 ? 90 : 75;
-      cameraOffset.set(0, aspect < 1 ? 4 : 3, aspect < 1 ? 8 : 7);
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
+    /* --- Input --- */
+    function mouseMove(x){
+      mouseX=x;
+      if(x<=5)mouseX=-Infinity; else if(x>=innerWidth-5)mouseX=Infinity;
+    }
+    function onResize(){
+      const a=innerWidth/innerHeight;
+      if(a<.75){camera.fov=80; camOffset.set(0,5,10); lookY=3;}
+      else if(a<1){camera.fov=90; camOffset.set(0,4,8); lookY=2.5;}
+      else{camera.fov=75; camOffset.set(0,3,7); lookY=2;}
+      camera.aspect=a; camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth,innerHeight);
+      renderer.setPixelRatio(Math.min(devicePixelRatio,MAX_RATIO));
     }
 
-    function animate() {
+    /* --- Laser --- */
+    function shoot(){
+      const start=player.localToWorld(new THREE.Vector3(0,0.8,0));
+
+      /* down-tilt relativ zur lokalen Rechts-Achse */
+      const dir=new THREE.Vector3(0,0,-1).applyQuaternion(player.quaternion);
+      const right=new THREE.Vector3(1,0,0).applyQuaternion(player.quaternion).normalize();
+      dir.applyAxisAngle(right,THREE.MathUtils.degToRad(-4)).normalize();
+
+      const len=30;
+      const beam=new THREE.Mesh(
+        new THREE.CylinderGeometry(LASER_R,LASER_R,len,12,1,true),
+        new THREE.MeshBasicMaterial({color:LASER_COL,transparent:true,opacity:.95,blending:THREE.AdditiveBlending})
+      );
+      beam.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dir);
+      beam.position.copy(start).add(dir.clone().multiplyScalar(len/2));
+      beam.material.depthWrite=false;
+      beam.userData={dir,traveled:0};
+      scene.add(beam); beams.push(beam);
+    }
+
+    /* --- Explosion (Sprite) --- */
+    function explode(pos){
+      const s=new THREE.Sprite(new THREE.SpriteMaterial({
+        color:LASER_COL,transparent:true,opacity:1,blending:THREE.AdditiveBlending}));
+      s.position.copy(pos); s.scale.set(.1,.1,.1);
+      explosions.push(s); scene.add(s);
+    }
+
+    /* --- Chunks --- */
+    function makeGrid(cx,cz){
+      const g=new THREE.GridHelper(CHUNK_SIZE*2,20,0x00ffff,0x5500ff);
+      g.position.set(cx*CHUNK_SIZE,-.01,cz*CHUNK_SIZE);
+      scene.add(g); gChunks.set(key(cx,cz),g);
+    }
+    function makeCity(cx,cz){
+      const grp=new THREE.Group(); grp.position.set(cx*CHUNK_SIZE,0,cz*CHUNK_SIZE);
+      const fill=new THREE.MeshBasicMaterial({color:0x050510,transparent:true,opacity:.3});
+      const neon=[0x00ffff,0xff00ff,0x00ff00,0xffff00,0xff6600,0xff0000];
+
+      for(let i=0;i<BLD_PER;i++){
+        const w=8+Math.random()*15,d=8+Math.random()*15,h=20+Math.random()*80;
+        let tries=0,ok=false,fx,fz;
+        while(!ok&&++tries<50){
+          const x=(Math.random()-.5)*(CHUNK_SIZE*1.5-20), z=(Math.random()-.5)*CHUNK_SIZE;
+          fx=x>0?x+10:x-10; fz=z;
+          ok=!grp.children.some(c=>c.box && c.box.intersectsBox(
+              new THREE.Box3().setFromCenterAndSize(new THREE.Vector3(fx,0,fz),new THREE.Vector3(w,1,d))));
+        }
+        const geom=new THREE.BoxGeometry(w,h,d);
+        const b=new THREE.Mesh(geom,fill); b.position.set(fx,h/2,fz);
+        b.box=new THREE.Box3().setFromObject(b);
+        b.add(new THREE.LineSegments(new THREE.EdgesGeometry(geom),
+              new THREE.LineBasicMaterial({color:neon[Math.random()*neon.length|0]})));
+        grp.add(b);
+      }
+      scene.add(grp); bChunks.set(key(cx,cz),grp);
+    }
+
+    /* --- Loop --- */
+    function animate(){
       requestAnimationFrame(animate);
-      const delta = clock.getDelta();
-      const t = clock.getElapsedTime();
+      const dt=clock.getDelta(), t=clock.getElapsedTime();
 
-      let targetRotationY;
-if (mouseX === Infinity) {
-  targetRotationY = robot.rotation.y - 1000; // simulate strong turn left
-} else if (mouseX === -Infinity) {
-  targetRotationY = robot.rotation.y + 1000; // simulate strong turn right
-} else {
-  targetRotationY = ((mouseX - window.innerWidth / 2) / (window.innerWidth / 2)) * -Math.PI * 2;
-}
-      if (!isFinite(targetRotationY)) targetRotationY = 0;
-robot.rotation.y += (targetRotationY - robot.rotation.y) * 0.1;
-      robot.translateZ(-ROBOT_SPEED * delta);
+      /* Steuerung – hoher ROT_FACTOR für schnelle Wendungen */
+      const ROT_FACTOR=-Math.PI*4*INPUT_S;
+      let trg;
+      if(mouseX===Infinity)       trg=player.rotation.y-1000;
+      else if(mouseX===-Infinity) trg=player.rotation.y+1000;
+      else trg=((mouseX-innerWidth/2)/(innerWidth/2))*ROT_FACTOR;
+      player.rotation.y+=(trg-player.rotation.y)*.1;
+      player.translateZ(-ROBOT_SPEED*dt);
 
-      const swing = Math.sin(t * 6) * 0.5;
-      const bend = Math.max(0, Math.sin(t * 6)) * 0.5;
+      /* Animation */
+      const swing=Math.sin(t*6)*.5,bend=Math.max(0,Math.sin(t*6))*.5;
+      player.userData.leftLeg.up.rotation.x  = swing;
+      player.userData.rightLeg.up.rotation.x =-swing;
+      player.userData.leftLeg.lo.rotation.x  =-bend;
+      player.userData.rightLeg.lo.rotation.x =-Math.max(0,Math.sin(t*6+Math.PI))*.5;
+      player.userData.leftArm.up.rotation.x  =-swing*.6;
+      player.userData.rightArm.up.rotation.x = swing*.6;
 
-      robot.userData.leftLeg.upper.rotation.x = swing;
-      robot.userData.rightLeg.upper.rotation.x = -swing;
-      robot.userData.leftLeg.lower.rotation.x = -bend;
-      robot.userData.rightLeg.lower.rotation.x = -Math.max(0, Math.sin(t * 6 + Math.PI)) * 0.5;
+      /* NPCs */
+      npcs.forEach(n=>{
+        n.translateZ(-n.userData.speed*dt);
+        if(Math.random()<.01) n.rotation.y+=(Math.random()-.5)*Math.PI/2;
+        n.userData.beacon.intensity=.6+.4*Math.sin(t*4+n.userData.phase);
+      });
 
-      robot.userData.leftArm.upper.rotation.x = -swing * 0.6;
-      robot.userData.rightArm.upper.rotation.x = swing * 0.6;
-
-      const cx = Math.floor(robot.position.x / CHUNK_SIZE);
-      const cz = Math.floor(robot.position.z / CHUNK_SIZE);
-      activeChunkSet.clear();
-      for (let dx = -ACTIVE_RADIUS; dx <= ACTIVE_RADIUS; dx++) {
-        for (let dz = -ACTIVE_RADIUS; dz <= ACTIVE_RADIUS; dz++) {
-          const key = chunkKey(cx + dx, cz + dz);
-          activeChunkSet.add(key);
-          if (!gridChunks.has(key)) generateGridChunk(cx + dx, cz + dz);
-          if (!buildingChunks.has(key)) generateCityChunk(cx + dx, cz + dz);
+      /* Beams + Treffer */
+      for(let i=beams.length-1;i>=0;i--){
+        const b=beams[i], mv=b.userData.dir.clone().multiplyScalar(LASER_SP*dt);
+        b.position.add(mv); b.userData.traveled+=mv.length();
+        for(let j=npcs.length-1;j>=0;j--){
+          const npc=npcs[j];
+          if(npc.position.distanceTo(b.position)<npc.userData.hit){
+            explode(npc.position);
+            scene.remove(npc); npcs.splice(j,1);
+            scene.remove(b);   beams.splice(i,1);
+            break;
+          }
         }
+        if(b.userData.traveled>600){scene.remove(b); beams.splice(i,1);}
       }
-      for (const [k, obj] of gridChunks) if (!activeChunkSet.has(k)) scene.remove(obj), gridChunks.delete(k);
-      for (const [k, obj] of buildingChunks) if (!activeChunkSet.has(k)) scene.remove(obj), buildingChunks.delete(k);
 
-      const camPos = robot.position.clone().add(cameraOffset.clone().applyQuaternion(robot.quaternion));
-      camera.position.lerp(camPos, 0.1);
-      const lookAt = robot.position.clone();
-      lookAt.y += 2.0;
-      camera.lookAt(lookAt);
-      renderer.render(scene, camera);
+      /* Explosion-Sprites */
+      for(let i=explosions.length-1;i>=0;i--){
+        const s=explosions[i];
+        s.scale.multiplyScalar(1+dt*6);
+        s.material.opacity-=dt*2.5;
+        if(s.material.opacity<=0){scene.remove(s); explosions.splice(i,1);}
+      }
+
+      /* Chunks */
+      const cx=Math.floor(player.position.x/CHUNK_SIZE),
+            cz=Math.floor(player.position.z/CHUNK_SIZE);
+      active.clear();
+      for(let dx=-ACTIVE_RADIUS;dx<=ACTIVE_RADIUS;dx++)
+        for(let dz=-ACTIVE_RADIUS;dz<=ACTIVE_RADIUS;dz++){
+          const k=key(cx+dx,cz+dz); active.add(k);
+          if(!gChunks.has(k)) makeGrid(cx+dx,cz+dz);
+          if(!bChunks.has(k)) makeCity(cx+dx,cz+dz);
+        }
+      for(const [k,o] of gChunks) if(!active.has(k)){scene.remove(o);gChunks.delete(k);}
+      for(const [k,o] of bChunks) if(!active.has(k)){scene.remove(o);bChunks.delete(k);}
+
+      /* Kamera */
+      const camPos=player.position.clone().add(camOffset.clone().applyQuaternion(player.quaternion));
+      camera.position.lerp(camPos,.1);
+      camera.lookAt(player.position.clone().setY(player.position.y+lookY));
+
+      renderer.render(scene,camera);
     }
-
-    init();
   </script>
 </body>
 </html>
