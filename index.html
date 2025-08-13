@@ -18,11 +18,11 @@
     html,body{height:100%}
     body{
       margin:0;overflow:hidden;background:#000;
-      font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--fg)
+      font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--fg);
+      touch-action: none; /* Canvas-first Gestensteuerung auf Touch */
     }
     canvas{display:block}
 
-    /* Responsiveness: Safe-Area für iOS/Android Gestenleisten, adaptive Höhe */
     @supports (height: 100svh){
       html,body{height:100svh}
     }
@@ -80,29 +80,26 @@
 
     /* ======= Konstanten ======= */
     const CHUNK_SIZE   = 200;
-    const ACTIVE_RADIUS= 2;                          // Sichtbarer Bereich in Chunks
+    const ACTIVE_RADIUS= 2;
     const isMobile     = /Mobi|Android/i.test(navigator.userAgent);
 
     // Spieler & NPCs
     const RUN_SPEED = 12;
-    const NPC_COUNT= isMobile? 40: 60;              // Basis-Budget (wird dynamisch "gedimmt")
+    const NPC_COUNT= isMobile? 40: 60;
     const NPC_SPEED= 2.0;
 
-    // Laser & FX (sichtbarer + Glow, flacher Tilt)
+    // Laser & FX
     const LASER_SPEED    = 70;
-    const LASER_TILT_DEG = -1.2;                    // flacher nach unten (zuvor -3.5)
-    const LASER_CORE_R   = 0.18;                    // sichtbarer Kern
-    const LASER_GLOW_R   = 0.36;                    // weiche Außenhülle
-    const LASER_LEN_HALF = 18;                      // halbe sichtbare Länge
+    const LASER_TILT_DEG = -1.2;
+    const LASER_CORE_R   = 0.18;
+    const LASER_GLOW_R   = 0.36;
+    const LASER_LEN_HALF = 18;
     const LASER_CORE_COL = 0xff7a33;
     const LASER_GLOW_COL = 0xff2200;
     const MAX_BEAMS      = 24;
 
-    // Buildings per chunk (nur noch grober Richtwert; tatsächliche Anzahl aus Blockraster)
-    const BLD_PER = isMobile ? 36 : 64;
-
     // Render-Qualität
-    const MAX_RATIO = innerWidth>2000?1.5:2;        // Hard cap für Pixelratio
+    const MAX_RATIO = innerWidth>2000?1.5:2;
 
     /* ======= Globals ======= */
     let scene, camera, renderer, player;
@@ -125,8 +122,16 @@
     const active = new Set();
     const key = (x,z)=>`${x},${z}`;
 
-    // Input (nur Pointer – deckt Maus/Touch/Stift ab)
+    // Input
     let mouseX = innerWidth/2;
+    const useSwipe = (('ontouchstart' in window) || navigator.maxTouchPoints > 0 || matchMedia('(pointer: coarse)').matches);
+    let rotTarget = 0;
+    const ROT_CLAMP = Math.PI * 3.2;
+    const TOUCH_SENS = 0.007;
+
+    // Touch-Drag State
+    let dragging = false;
+    let startX = 0, startY = 0, lastX = 0, startTime = 0, moved = false;
 
     // Temp Vektoren
     const TMP_V1 = new THREE.Vector3();
@@ -137,7 +142,7 @@
     const NPC_MAX = NPC_COUNT;
     let npcBudget = NPC_MAX;
 
-    // Laser: Geometrien/Materialien (toneMapped=false → günstiger/konstanter)
+    // Laser: Geometrien/Materialien
     const LASER_CORE_GEOM = new THREE.CylinderGeometry(LASER_CORE_R, LASER_CORE_R, 1, 20, 1, true);
     const LASER_GLOW_GEOM = new THREE.CylinderGeometry(LASER_GLOW_R, LASER_GLOW_R, 1, 12, 1, true);
     const LASER_CORE_MAT  = new THREE.MeshBasicMaterial({ color:LASER_CORE_COL, transparent:true, opacity:1.0, blending:THREE.AdditiveBlending, depthWrite:false, toneMapped:false });
@@ -165,15 +170,15 @@
     const G_JOINT    = new THREE.SphereGeometry(.14, 10, 8);
     const G_CAPS_UP  = new THREE.CapsuleGeometry(.11, .6, 4, 6);
     const G_CAPS_LO  = new THREE.CapsuleGeometry(.10, .5, 4, 6);
-    // Füße werden nicht genutzt (bewusst entfernt)
+    // keine Füße
 
     /* ======= Blink-Death Parameter ======= */
-    const BLINK_COUNT    = 3;       // dreimal blinken
-    const BLINK_INTERVAL = 0.12;    // Sekunden je Phase (an/aus)
-    const SINK_SPEED     = 10.0;    // Nutzerwert
+    const BLINK_COUNT    = 3;
+    const BLINK_INTERVAL = 0.12;
+    const SINK_SPEED     = 10.0;
     const RED_FLASH_MAT  = new THREE.MeshBasicMaterial({ color:0xff0000, toneMapped:false });
 
-    /* ======= Runde, rote Beacon als weiche Scheibe ======= */
+    /* ======= Runde, rote Beacon ======= */
     function makeDiscTexture(size=64){
       const c = document.createElement('canvas');
       c.width = c.height = size;
@@ -190,9 +195,8 @@
     }
     const BEACON_TEX = makeDiscTexture();
 
-    /* ======= Deterministisches 2D-Random für Zellen ======= */
+    /* ======= Deterministisches 2D-Random ======= */
     function rand2(i,j){
-      // Schneller, deterministischer Hash -> [0,1)
       let h = (i*374761393) ^ (j*668265263);
       h = (h ^ (h>>>13)) * 1274126177;
       h = (h ^ (h>>>16)) >>> 0;
@@ -205,13 +209,13 @@
 
     function init(){
       scene = new THREE.Scene();
-      scene.background = new THREE.Color(0x11203a);             // etwas heller
-      scene.fog = new THREE.FogExp2(0x0e1a32, 0.004);           // Nutzerwert beibehalten
+      scene.background = new THREE.Color(0x11203a);
+      scene.fog = new THREE.FogExp2(0x0e1a32, 0.006);
 
       camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
 
       renderer = new THREE.WebGLRenderer({
-        antialias: !isMobile,                         // Mobile ohne AA → Bandbreite sparen
+        antialias: !isMobile,
         powerPreference:'high-performance',
         alpha:false, stencil:false
       });
@@ -220,10 +224,10 @@
       renderer.shadowMap.enabled = !isMobile;
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.38;            // etwas heller
+      renderer.toneMappingExposure = 1.38;
       document.body.appendChild(renderer.domElement);
 
-      // Lighting (etwas heller)
+      // Lighting
       const hemi = new THREE.HemisphereLight(0x5577cc, 0x220022, 1.8);
       scene.add(hemi);
       const sun = new THREE.DirectionalLight(0xffffff, 1.9);
@@ -239,7 +243,7 @@
       // NPCs
       for(let i=0;i<NPC_COUNT;i++){
         const n = makeRobot();
-        const s = 0.9 + Math.random()*1.8; // 0.9 … 2.7 ×
+        const s = 0.9 + Math.random()*1.8;
         n.scale.set(s,s,s);
         n.userData.hit = s*1.1;
         n.position.set((Math.random()-.5)*CHUNK_SIZE*3, 1.7, (Math.random()-.5)*CHUNK_SIZE*3);
@@ -247,14 +251,9 @@
         n.userData.speed = NPC_SPEED;
         n.userData.phase = Math.random()*Math.PI*2;
 
-        // Runde, rote Beacon (Sprite) – Additive, toneMapped=false
         const beaconMat = new THREE.SpriteMaterial({
-          map: BEACON_TEX,
-          transparent: true,
-          opacity: 0.75,
-          blending: THREE.AdditiveBlending,
-          depthWrite: false,
-          toneMapped: false
+          map: BEACON_TEX, transparent: true, opacity: 0.75,
+          blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false
         });
         const beacon = new THREE.Sprite(beaconMat);
         beacon.position.set(0, 2*s, 0);
@@ -266,16 +265,18 @@
 
         scene.add(n); npcs.push(n);
       }
-      applyNpcBudget(); // initial anwenden
+      applyNpcBudget();
 
-      // Pointer-Events (einheitlich)
-      addEventListener('pointermove', e=>mouseMove(e.clientX), {passive:true});
-      addEventListener('pointerdown', ()=>shoot(), {passive:true});
+      // Pointer-Events
+      addEventListener('pointerdown', onPointerDown, {passive:false});
+      addEventListener('pointermove', onPointerMove, {passive:false});
+      addEventListener('pointerup', onPointerUp, {passive:false});
+      addEventListener('pointercancel', onPointerUp, {passive:false});
       addEventListener('resize', onResize);
       onResize();
     }
 
-    /* ======= Robot (ohne Füße) ======= */
+    /* ======= Robot ======= */
     function makeRobot(){
       const m=(g,mat=MAT_BODY)=>{ const mesh=new THREE.Mesh(g,mat); mesh.castShadow=!isMobile; mesh.receiveShadow=!isMobile; return mesh; };
       const g=new THREE.Group();
@@ -299,14 +300,43 @@
       const la=limb( 1,.45), ra=limb(-1,.45), ll=limb(.28,-.55,.65,.55), rl=limb(-.28,-.55,.65,.55);
       torso.add(la.grp,ra.grp,ll.grp,rl.grp);
 
-      // *** KEINE FÜSSE ***
       g.userData={ leftArm:la,rightArm:ra,leftLeg:ll,rightLeg:rl };
       g.position.y=1.7;
       return g;
     }
 
-    /* ======= Input ======= */
-    function mouseMove(x){ mouseX = x; }
+    /* ======= Input Helpers ======= */
+    function isInLinksArea(target){ return target && target.closest && target.closest('#links'); }
+    function onPointerDown(e){
+      if(useSwipe && (e.pointerType === 'touch' || e.pointerType === 'pen')){
+        if (isInLinksArea(e.target)) return;
+        dragging = true; moved = false;
+        startX = lastX = e.clientX; startY = e.clientY; startTime = performance.now();
+        e.preventDefault();
+      }else{ shoot(); }
+    }
+    function onPointerMove(e){
+      if(useSwipe && (e.pointerType === 'touch' || e.pointerType === 'pen')){
+        if(!dragging) return;
+        const dx = e.clientX - lastX;
+        lastX = e.clientX;
+        if(Math.abs(e.clientX - startX) > 8 || Math.abs(e.clientY - startY) > 8) moved = true;
+        rotTarget = Math.max(-ROT_CLAMP, Math.min(ROT_CLAMP, rotTarget - dx * TOUCH_SENS));
+        e.preventDefault();
+      }else{
+        mouseX = e.clientX;
+      }
+    }
+    function onPointerUp(e){
+      if(useSwipe && (e.pointerType === 'touch' || e.pointerType === 'pen')){
+        const dt = performance.now() - startTime;
+        const dx = e.clientX - startX, dy = e.clientY - startY;
+        const tap = !moved && (dx*dx + dy*dy) < (18*18) && dt < 260;
+        if(tap && !isInLinksArea(e.target)) shoot();
+        dragging = false;
+        e.preventDefault();
+      }
+    }
 
     function onResize(){
       const a = innerWidth/innerHeight;
@@ -316,34 +346,30 @@
       else { camera.fov = 74; camOffset.set(0, 3.2, 7.2); lookY = 2.2; }
       camera.aspect=a; camera.updateProjectionMatrix();
       renderer.setSize(innerWidth, innerHeight);
-      // PixelRatio bleibt – wird dynamisch im Loop geregelt
     }
 
-    /* ======= Laser: Pool mit Kern+Glow als Gruppe ======= */
+    /* ======= Laser ======= */
     function acquireBeam(){
-      const beam = beamPool.pop() || (()=>{
-        const grp = new THREE.Group();
+      const grp = beamPool.pop() || (function(){
+        const g = new THREE.Group();
         const core = new THREE.Mesh(LASER_CORE_GEOM, LASER_CORE_MAT.clone());
         const glow = new THREE.Mesh(LASER_GLOW_GEOM, LASER_GLOW_MAT.clone());
-        core.name = 'core'; glow.name = 'glow';
-        grp.add(glow); grp.add(core);
-        return grp;
+        core.name='core'; glow.name='glow';
+        g.add(glow); g.add(core);
+        return g;
       })();
-      beam.scale.set(1, LASER_LEN_HALF, 1);  // halbe Länge
-      beam.userData.traveled = 0;
-      return beam;
+      grp.scale.set(1, LASER_LEN_HALF, 1);
+      grp.userData.traveled = 0;
+      return grp;
     }
     function releaseBeam(b){ b.visible=false; scene.remove(b); beamPool.push(b); }
 
     function shoot(){
       if(beams.length>=MAX_BEAMS) return;
       const start = player.localToWorld(new THREE.Vector3(0,0.9,0));
-
-      // Blickrichtung + flacher Tilt nach unten
       const dir = new THREE.Vector3(0,0,-1).applyQuaternion(player.quaternion);
       const right= new THREE.Vector3(1,0,0).applyQuaternion(player.quaternion).normalize();
       dir.applyAxisAngle(right, THREE.MathUtils.degToRad(LASER_TILT_DEG)).normalize();
-
       const beam = acquireBeam();
       beam.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir);
       beam.position.copy(start).add(TMP_V1.copy(dir).multiplyScalar(LASER_LEN_HALF));
@@ -352,21 +378,15 @@
       scene.add(beam); beams.push(beam);
     }
 
-    function explode(pos){
-      const s = new THREE.Sprite(EXPLO_MAT.clone());
-      s.position.copy(pos);
-      s.scale.set(.1,.1,.1);
-      explosions.push(s); scene.add(s);
-    }
-
-    /* ======= City Chunks (stadtähnlich: Blöcke + Straßen + Plätze) ======= */
+    /* ======= City Chunks ======= */
     function makeGrid(cx,cz){
-      const g = new THREE.GridHelper(CHUNK_SIZE*2, 20, 0x77ffff, 0x9933ff); // etwas heller
+      const g = new THREE.GridHelper(CHUNK_SIZE*2, 20, 0x77ffff, 0x9933ff);
       g.position.set(cx*CHUNK_SIZE, -0.02, cz*CHUNK_SIZE);
-      g.material.transparent = true; g.material.opacity = .20;
-      g.material.depthWrite = false;  // hinter alles
+      g.material.transparent = true; g.material.opacity = .72;
+      g.material.depthWrite = false;      // schreibt NICHT in Z → übermalt nichts
+      g.material.depthTest  = true;       // respektiert vorhandene Z (Roboter/Outlines)
       g.material.fog = true;
-      g.renderOrder = -1;
+      g.renderOrder = -1000;              // extrem früh im transparenten Sortierblock
       scene.add(g); gridChunks.set(key(cx,cz), g);
     }
 
@@ -374,59 +394,37 @@
       const group = new THREE.Group();
       group.position.set(cx*CHUNK_SIZE,0,cz*CHUNK_SIZE);
 
-      // --- Stadt-Parameter ---
-      const TILE   = 70;        // Rasterabstand zwischen Blockzentren (größer -> weniger Blöcke)
-      const ROAD   = 16;        // Straßenbreite (leere Korridore)
-      const SETBK  = 4;         // Gebäuderandabstand zur Straße
-      const PLAZA_N= 4;         // jeder n-te Knoten ist Platz
-      const PLAZA  = ROAD*2.5;  // Kantenlänge des Platzes
+      const TILE=70, ROAD=16, SETBK=4, PLAZA_N=4;
 
-      // Chunk-Grenzen in Weltkoordinaten (für nahtloses Raster über Chunks)
       const minX = group.position.x - CHUNK_SIZE/2;
       const maxX = group.position.x + CHUNK_SIZE/2;
       const minZ = group.position.z - CHUNK_SIZE/2;
       const maxZ = group.position.z + CHUNK_SIZE/2;
 
-      // Zellenbereich, etwas erweitert um Randartefakte zu vermeiden
       const i0 = Math.floor(minX / TILE) - 1;
       const i1 = Math.floor(maxX / TILE) + 1;
       const j0 = Math.floor(minZ / TILE) - 1;
       const j1 = Math.floor(maxZ / TILE) + 1;
 
-      // Wir sammeln erst alle Bauten, erzeugen dann ein InstancedMesh mit passender Anzahl
-      const builds = []; // {w,d,h,px,pz}
-
+      const builds = [];
       for(let i=i0; i<=i1; i++){
         for(let j=j0; j<=j1; j++){
-          // Zentrum der Block-Zelle in Weltkoordinaten
           const cxw = (i + 0.5) * TILE;
           const czw = (j + 0.5) * TILE;
-
-          // Platz-Bedingung: jeder PLAZA_N-te Knoten -> große Freifläche
           const isPlaza = (i % PLAZA_N === 0) && (j % PLAZA_N === 0);
-
-          // Zufall pro Zelle (deterministisch)
           const r = rand2(i, j);
-          const occupied = !isPlaza && r > 0.25; // 75% der Nicht-Platz-Zellen bebaut
-
+          const occupied = !isPlaza && r > 0.25;
           if(!occupied) continue;
 
-          // Bauland (Quadrat) innerhalb der Zelle
-          const buildMax = TILE - ROAD - 2*SETBK; // maximaler Block-Innenraum
+          const buildMax = TILE - ROAD - 2*SETBK;
           const w = Math.max(10, buildMax * (0.55 + 0.35 * rand2(i+11, j+3)));
           const d = Math.max(10, buildMax * (0.55 + 0.35 * rand2(i+7,  j+19)));
-
-          // Höhe mit Varianz (leichter "Downtown"-Bias alle 2. Knoten)
-          const baseH = 26;
-          const varH  = 90;
-          const bias  = ((i & 1) === 0 && (j & 1) === 0) ? 1.15 : 1.0;
+          const baseH = 26, varH=90, bias = ((i & 1) === 0 && (j & 1) === 0) ? 1.15 : 1.0;
           const h = baseH + varH * (0.35 + 0.65 * rand2(i+23, j+41)) * bias;
 
-          // Weltposition -> Chunk-lokal
           const px = cxw - group.position.x + (rand2(i+5, j+9)-0.5) * (buildMax - w);
           const pz = czw - group.position.z + (rand2(i+13, j+27)-0.5) * (buildMax - d);
 
-          // Achte darauf, dass das Gebäude komplett innerhalb des Chunks erscheint (leichter Puffer)
           if (px - w/2 < -CHUNK_SIZE/2-5 || px + w/2 > CHUNK_SIZE/2+5 ||
               pz - d/2 < -CHUNK_SIZE/2-5 || pz + d/2 > CHUNK_SIZE/2+5) continue;
 
@@ -434,24 +432,20 @@
         }
       }
 
-      // Material für die Gebäude (durchsichtig, keine Z-Okklusion)
-      const mat = new THREE.MeshBasicMaterial({ color:0x0d0f22, transparent:true, opacity:.05 });
-      mat.depthWrite = false;
-      mat.polygonOffset = true;
-      mat.polygonOffsetFactor = 1;
-      mat.polygonOffsetUnits  = 1;
+      // Gebäude-Körper: transparent, ohne Z-Schreiben
+      const bodyMat = new THREE.MeshBasicMaterial({ color:0x0d0f22, transparent:true, opacity:.05 });
+      bodyMat.depthWrite = false;
+      bodyMat.polygonOffset = true;
+      bodyMat.polygonOffsetFactor = 1;
+      bodyMat.polygonOffsetUnits  = 1;
 
-      // InstancedMesh mit passender Anzahl
       const baseGeom = new THREE.BoxGeometry(1,1,1);
-      const inst = new THREE.InstancedMesh(baseGeom, mat, builds.length);
+      const inst = new THREE.InstancedMesh(baseGeom, bodyMat, builds.length);
       inst.castShadow=false; inst.receiveShadow=false;
       inst.renderOrder = -2;
-
-      // Neon edge lines (merged per color)
       const colorBuckets = new Map();
       for(const c of NEON) colorBuckets.set(c, []);
 
-      // Transformen setzen + Kanten sammeln
       const m = new THREE.Matrix4();
       const s = new THREE.Vector3();
       const q = new THREE.Quaternion();
@@ -465,8 +459,6 @@
 
         const eg = new THREE.EdgesGeometry(new THREE.BoxGeometry(w,h,d));
         eg.applyMatrix4(new THREE.Matrix4().makeTranslation(px, h/2, pz));
-
-        // Farbe deterministisch aus Position wählen (mind. 6 Neonfarben, hier 10)
         const rr = rand2(Math.floor(px + group.position.x), Math.floor(pz + group.position.z));
         const col = NEON[Math.floor(rr * NEON.length)];
         colorBuckets.get(col).push(eg);
@@ -474,58 +466,45 @@
       inst.instanceMatrix.needsUpdate = true;
       group.add(inst);
 
-      // Create one LineSegments per color bucket (mit Fog & ohne DepthWrite)
+      // Outlines: schreiben in die Tiefe → überlagern Grid zuverlässig
       for(const [col, list] of colorBuckets){
         if(!list.length) continue;
         const merged = mergeGeometries(list, false);
         const lnMat = new THREE.LineBasicMaterial({color:col});
-        lnMat.depthWrite = false;
+        lnMat.depthWrite = true;        // <-- wichtig
+        lnMat.depthTest  = true;
         lnMat.toneMapped = false;
         lnMat.fog = true;
         const ln = new THREE.LineSegments(merged, lnMat);
+        ln.renderOrder = -100;          // beliebig unterhalb transparenter Effekte
         group.add(ln);
       }
 
       scene.add(group); cityChunks.set(key(cx,cz), group);
     }
 
-    /* ======= Blink-Death Logik ======= */
+    /* ======= Blink-Death ======= */
     function triggerBlinkDeath(npc, timeNow){
       if(npc.userData.dying) return;
-      // Beacon entfernen
-      if(npc.userData.beacon){
-        npc.remove(npc.userData.beacon);
-        npc.userData.beacon = null;
-      }
-      npc.userData.dying = {
-        start: timeNow,
-        sinking: false,
-        _lastOn: undefined
-      };
-      npc.userData.speed = 0; // Bewegung stoppen
+      if(npc.userData.beacon){ npc.remove(npc.userData.beacon); npc.userData.beacon = null; }
+      npc.userData.dying = { start: timeNow, sinking: false, _lastOn: undefined };
+      npc.userData.speed = 0;
 
-      // Alle Meshes sammeln und Originalmaterialien merken
-      const meshes = [];
-      const mats = [];
-      npc.traverse(o=>{
-        if(o.isMesh){
-          meshes.push(o);
-          mats.push(o.material);
-        }
-      });
+      const meshes = [], mats = [];
+      npc.traverse(o=>{ if(o.isMesh){ meshes.push(o); mats.push(o.material); } });
       npc.userData.deathMeshes = meshes;
       npc.userData.deathOrigMats = mats;
 
-      // Kill-Counter direkt bei Treffer zählen (einmalig)
+      // Kill-Counter
       kills++; if(killsEl) killsEl.textContent = String(kills);
     }
 
-    /* ======= Adaptive Helfer ======= */
+    /* ======= Adaptive ======= */
     function autoResolution(dt){
       if (resCooldown > 0) { resCooldown--; return; }
       const ms = dt * 1000;
-      msAvg = msAvg * 0.9 + ms * 0.1;      // gleitender Mittelwert
-      const desired = 1000 / 60;           // Ziel: 60 FPS
+      msAvg = msAvg * 0.9 + ms * 0.1;
+      const desired = 1000 / 60;
       const maxPR = Math.min(devicePixelRatio, MAX_RATIO);
       const curPR = renderer.getPixelRatio();
       if (msAvg > desired * 1.15 && curPR > 1){
@@ -538,9 +517,7 @@
         resCooldown = 30;
       }
     }
-    function applyNpcBudget(){
-      for (let i=0;i<npcs.length;i++) npcs[i].visible = (i < npcBudget);
-    }
+    function applyNpcBudget(){ for (let i=0;i<npcs.length;i++) npcs[i].visible = (i < npcBudget); }
     function tuneNpcBudget(){
       if (msAvg > 22 && npcBudget > 18){ npcBudget -= 2; applyNpcBudget(); }
       if (msAvg < 14 && npcBudget < NPC_MAX){ npcBudget += 2; applyNpcBudget(); }
@@ -565,15 +542,15 @@
       autoResolution(dt);
       tuneNpcBudget();
 
-      // Maus: sanftes Einlenken
+      // Steuerung
       const rotFactor = -Math.PI * 3.2;
-      const trg = ((mouseX - innerWidth/2) / (innerWidth/2)) * rotFactor;
-      player.rotation.y += (trg - player.rotation.y) * 0.1;
+      if(!useSwipe){ rotTarget = ((mouseX - innerWidth/2) / (innerWidth/2)) * rotFactor; }
+      player.rotation.y += (rotTarget - player.rotation.y) * 0.1;
 
-      // Konstantes Laufen
+      // Bewegung
       player.translateZ(-RUN_SPEED*dt);
 
-      // Spieler-Animation (wie gehabt)
+      // Spieler-Animation
       const swing = Math.sin(t*6)*.5, bend = Math.max(0,Math.sin(t*6))*.5;
       const ud = player.userData;
       ud.leftLeg.up.rotation.x  = swing;
@@ -583,10 +560,10 @@
       ud.leftArm.up.rotation.x  = -swing*.6;
       ud.rightArm.up.rotation.x =  swing*.6;
 
-      // NPCs (rückwärts iterieren für sicheres Entfernen)
+      // NPCs
       for(let i=npcs.length-1;i>=0;i--){
         const n = npcs[i];
-        if (!n.visible && !n.userData.dying) continue; // unsichtbare sparen
+        if (!n.visible && !n.userData.dying) continue;
 
         if(n.userData.dying){
           const d = n.userData.dying;
@@ -597,33 +574,22 @@
               if(on !== d._lastOn){
                 d._lastOn = on;
                 const meshes = n.userData.deathMeshes, mats = n.userData.deathOrigMats;
-                for(let k=0;k<meshes.length;k++){
-                  meshes[k].material = on ? RED_FLASH_MAT : mats[k];
-                }
+                for(let k=0;k<meshes.length;k++){ meshes[k].material = on ? RED_FLASH_MAT : mats[k]; }
               }
             }else{
-              // Start Sinken: dauerhaft rot
               const meshes = n.userData.deathMeshes;
-              for(let k=0;k<meshes.length;k++){
-                meshes[k].material = RED_FLASH_MAT;
-              }
+              for(let k=0;k<meshes.length;k++){ meshes[k].material = RED_FLASH_MAT; }
               d.sinking = true;
             }
           }else{
             n.position.y -= SINK_SPEED*dt;
-            if(n.position.y < -2.5){
-              // Aufräumen
-              scene.remove(n);
-              npcs.splice(i,1);
-              continue;
-            }
+            if(n.position.y < -2.5){ scene.remove(n); npcs.splice(i,1); continue; }
           }
         }else{
-          // Lebende NPCs bewegen
           n.translateZ(-n.userData.speed*dt);
           if(Math.random()<.01) n.rotation.y += (Math.random()-.5)*Math.PI/2;
 
-          // *** Optionale Geh-Animation: nur bei guter Performance ***
+          // optionale Geh-Animation bei guter Performance
           if (msAvg < 22){
             const ph = t*6 + n.userData.phase;
             const sw = Math.sin(ph)*.45;
@@ -637,7 +603,6 @@
             udn.rightArm.up.rotation.x =  sw*.6;
           }
 
-          // Beacon: leicht pulsieren (Skala + Opacity)
           if(n.userData.beacon){
             const pulse = Math.sin(t*3.6 + n.userData.phase);
             const scale = n.userData.beaconBase * (1 + 0.1*pulse);
@@ -645,7 +610,6 @@
             n.userData.beacon.material.opacity = 0.65 + 0.2*pulse;
           }
 
-          // Bounds: spawne näher, wenn zu weit weg
           if(n.position.distanceToSquared(player.position) > (CHUNK_SIZE*CHUNK_SIZE*9)){
             n.position.copy(player.position).add(new THREE.Vector3((Math.random()-.5)*CHUNK_SIZE, 0, (Math.random()-.5)*CHUNK_SIZE));
           }
@@ -658,12 +622,11 @@
         const mv = TMP_V1.copy(b.userData.dir).multiplyScalar(LASER_SPEED*dt);
         b.position.add(mv);
         b.userData.traveled += mv.length();
-        // Kollision (Sphäre) – nur sichtbare NPCs prüfen
+
         for(let j=npcs.length-1;j>=0;j--){
           const npc=npcs[j];
           if(!npc.visible || npc.userData.dying) continue;
           if(npc.position.distanceTo(b.position) < npc.userData.hit){
-            // Blink-Death
             triggerBlinkDeath(npc, t);
             releaseBeam(b); beams.splice(i,1);
             break;
@@ -672,7 +635,7 @@
         if(b.userData.traveled>600){ releaseBeam(b); beams.splice(i,1); }
       }
 
-      // (Optionale) Explosion FX (derzeit ungenutzt)
+      // FX
       for(let i=explosions.length-1;i>=0;i--){
         const s=explosions[i];
         s.scale.multiplyScalar(1+dt*6);
@@ -680,11 +643,11 @@
         if(s.material.opacity<=0){ scene.remove(s); explosions.splice(i,1); }
       }
 
-      // World streaming (gedrosselte Chunk-Erzeugung + sauberes Dispose)
+      // World streaming
       const cx = Math.floor(player.position.x/CHUNK_SIZE);
       const cz = Math.floor(player.position.z/CHUNK_SIZE);
       active.clear();
-      let built = 0, buildCap = 1; // max 1 neuer Chunk pro Frame
+      let built = 0, buildCap = 1;
       for(let dx=-ACTIVE_RADIUS; dx<=ACTIVE_RADIUS; dx++){
         for(let dz=-ACTIVE_RADIUS; dz<=ACTIVE_RADIUS; dz++){
           const K = key(cx+dx, cz+dz); active.add(K);
