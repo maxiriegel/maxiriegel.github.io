@@ -12,14 +12,35 @@
       --accent:#00ffff;
       --bg:#000;
       --ui-font:'VT323', monospace;
+      /* Desktop baseline */
       --ui-size:clamp(18px,3.6vw,26px);
+      --hud-size:clamp(18px,3.6vw,26px);
     }
+    @media (pointer: coarse){
+      :root{
+        --ui-size:clamp(20px,5.4vw,28px);
+        --hud-size:clamp(22px,5.8vw,30px);
+      }
+    }
+    @media (max-width:380px) and (pointer:coarse){
+      :root{
+        --ui-size:clamp(19px,5.8vw,27px);
+        --hud-size:clamp(21px,6.2vw,29px);
+      }
+    }
+    @media (orientation:landscape) and (pointer:coarse){
+      :root{
+        --ui-size:clamp(16px,3.6vh,22px);
+        --hud-size:clamp(18px,4.0vh,24px);
+      }
+    }
+
     *{box-sizing:border-box}
     html,body{height:100%}
     body{
       margin:0;overflow:hidden;background:#000;
       font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--fg);
-      touch-action: none; /* Canvas-first Gestensteuerung auf Touch */
+      touch-action: none;
     }
     canvas{display:block}
 
@@ -27,21 +48,20 @@
       html,body{height:100svh}
     }
 
-    /* HUD: Kill Counter (oben mittig) */
     #kills{
-      position:absolute;top:10px;left:50%;transform:translateX(-50%);
-      font-family:var(--ui-font);font-size:var(--ui-size);line-height:1;
-      color:#ffffff;opacity:.9;letter-spacing:.02em;
-      text-shadow:0 0 8px rgba(0,255,255,.45), 0 0 2px rgba(0,0,0,.8);
+      position:absolute;left:50%;transform:translateX(-50%);
+      top:calc(env(safe-area-inset-top, 0px) + 10px);
+      font-family:var(--ui-font);font-size:var(--hud-size);line-height:1;
+      color:#ffffff;opacity:.95;letter-spacing:.02em;
+      text-shadow:0 0 10px rgba(0,255,255,.5), 0 0 2px rgba(0,0,0,.8);
       z-index:110;pointer-events:none;
     }
 
-    /* Link-Leiste (unten) */
     #links{
       position:absolute;bottom:10px;width:100%;text-align:center;z-index:100;pointer-events:auto;
-      padding-bottom:max(10px, env(safe-area-inset-bottom));
-      padding-left:max(0px, env(safe-area-inset-left));
-      padding-right:max(0px, env(safe-area-inset-right));
+      padding-bottom:calc(max(10px, env(safe-area-inset-bottom, 0px)));
+      padding-left:max(0px, env(safe-area-inset-left, 0px));
+      padding-right:max(0px, env(safe-area-inset-right, 0px));
       font-family:var(--ui-font);
     }
     #links a{
@@ -54,7 +74,6 @@
     #links a:hover{color:#0ff; transform:translateY(-1px); text-shadow:0 0 10px rgba(0,255,255,.6) }
   </style>
 
-  <!-- ES Module shims for wide browser support -->
   <script async src="https://ga.jspm.io/npm:es-module-shims@1.6.3/dist/es-module-shims.js"></script>
   <script type="importmap">
     {
@@ -77,6 +96,7 @@
   <script type="module">
     import * as THREE from 'three';
     import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+    import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
     /* ======= Konstanten ======= */
     const CHUNK_SIZE   = 200;
@@ -97,6 +117,9 @@
     const LASER_CORE_COL = 0xff7a33;
     const LASER_GLOW_COL = 0xff2200;
     const MAX_BEAMS      = 24;
+
+    // Grid Farbe (einfarbig, überall gleich)
+    const GRID_COLOR = 0x66ccff;
 
     // Render-Qualität
     const MAX_RATIO = innerWidth>2000?1.5:2;
@@ -129,9 +152,11 @@
     const ROT_CLAMP = Math.PI * 3.2;
     const TOUCH_SENS = 0.007;
 
-    // Touch-Drag State
-    let dragging = false;
-    let startX = 0, startY = 0, lastX = 0, startTime = 0, moved = false;
+    // Dual-Touch
+    let steerId = null;
+    const touches = new Map();
+    const TAP_DIST2 = 18*18;
+    const TAP_TIME  = 260;
 
     // Temp Vektoren
     const TMP_V1 = new THREE.Vector3();
@@ -150,26 +175,45 @@
 
     const EXPLO_MAT  = new THREE.SpriteMaterial({color:0xff6600, transparent:true, opacity:1, blending:THREE.AdditiveBlending, toneMapped:false});
 
-    // Neon-Palette (>=6 Farben → 10 Farben)
+    // Neon-Palette
     const NEON = [
       0x00ffff, 0xff00ff, 0x55ff88, 0xffff66, 0xff7a33,
       0xff3366, 0x66ccff, 0xff66cc, 0xaaff00, 0xffdd55
     ];
 
-    /* ======= Materialien/Geometrien für Bot ======= */
-    const MAT_BODY  = new THREE.MeshStandardMaterial({ color:0x616779, metalness:.85, roughness:.32 });
-    const MAT_JOINT = new THREE.MeshStandardMaterial({ color:0xaab3c2, metalness:1.0, roughness:.25 });
-    const MAT_VISOR = new THREE.MeshStandardMaterial({ color:0x0f1623, emissive:0x44caff, emissiveIntensity:1.6, metalness:.9, roughness:.2 });
+    /* ======= Materialien/Geometrien für Bot (heller Chrome/Mercury Look) ======= */
+    const MAT_BODY  = new THREE.MeshPhysicalMaterial({
+      color:0xf2f6ff,               // heller Grundton
+      metalness:1.0, roughness:0.022,
+      clearcoat:1.0, clearcoatRoughness:0.015,
+      ior:1.45, envMapIntensity:2.15   // kräftigere Spiegelungen
+    });
+    const MAT_JOINT = new THREE.MeshPhysicalMaterial({
+      color:0xf9fbff,
+      metalness:1.0, roughness:0.032,
+      clearcoat:1.0, clearcoatRoughness:0.02,
+      ior:1.45, envMapIntensity:1.9
+    });
+    const MAT_VISOR = new THREE.MeshStandardMaterial({ color:0x0f1623, emissive:0x44caff, emissiveIntensity:1.7, metalness:.9, roughness:.2 });
 
-    const G_TORSO    = new THREE.BoxGeometry(.9,1.25,.55);
-    const G_SHOULDER = new THREE.BoxGeometry(1.1,.2,.6);
-    const G_HEAD     = new THREE.SphereGeometry(.38, 12, 10);
-    const G_NECK     = new THREE.CylinderGeometry(.08,.08,.3, 8);
+    // Capsule geometries
+    const G_TORSO_CAP   = new THREE.CapsuleGeometry(0.34, 0.9, 6, 12);
+    const G_SHOULDER_CAP= new THREE.CapsuleGeometry(0.18, 0.9, 6, 12);
+
+    const G_HEAD     = new THREE.SphereGeometry(.38, 20, 16);
+    const G_NECK     = new THREE.CylinderGeometry(.08,.08,.3, 16);
     const G_VISOR    = new THREE.BoxGeometry(.52,.18,.03);
 
-    const G_JOINT    = new THREE.SphereGeometry(.14, 10, 8);
-    const G_CAPS_UP  = new THREE.CapsuleGeometry(.11, .6, 4, 6);
-    const G_CAPS_LO  = new THREE.CapsuleGeometry(.10, .5, 4, 6);
+    const JOINT_R    = .14;
+    const UP_R_ARM   = .12, LO_R_ARM = .11;
+    const UP_R_LEG   = .12, LO_R_LEG = .11;
+    const EPS        = .005;
+
+    const G_JOINT    = new THREE.SphereGeometry(JOINT_R, 18, 14);
+    const G_CAPS_UP_ARM = new THREE.CapsuleGeometry(UP_R_ARM, .52, 8, 12); // verkürzt
+    const G_CAPS_LO_ARM = new THREE.CapsuleGeometry(LO_R_ARM, .42, 8, 12); // verkürzt
+    const G_CAPS_UP_LEG = new THREE.CapsuleGeometry(UP_R_LEG, .65, 8, 12);
+    const G_CAPS_LO_LEG = new THREE.CapsuleGeometry(LO_R_LEG, .55, 8, 12);
     // keine Füße
 
     /* ======= Blink-Death Parameter ======= */
@@ -219,18 +263,24 @@
         powerPreference:'high-performance',
         alpha:false, stencil:false
       });
+      renderer.physicallyCorrectLights = true;
       renderer.setSize(innerWidth, innerHeight);
       renderer.setPixelRatio(Math.min(devicePixelRatio, MAX_RATIO));
       renderer.shadowMap.enabled = !isMobile;
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.38;
+      renderer.toneMappingExposure = 1.38; // Szene insgesamt konstant, Roboter via envMap heller
       document.body.appendChild(renderer.domElement);
 
+      // Environment für Chrome-Look
+      const pmrem = new THREE.PMREMGenerator(renderer);
+      const envTex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+      scene.environment = envTex;
+
       // Lighting
-      const hemi = new THREE.HemisphereLight(0x5577cc, 0x220022, 1.8);
+      const hemi = new THREE.HemisphereLight(0x7aa1ff, 0x220022, 2.0);
       scene.add(hemi);
-      const sun = new THREE.DirectionalLight(0xffffff, 1.9);
+      const sun = new THREE.DirectionalLight(0xffffff, 2.0);
       sun.position.set(12,22,14);
       sun.castShadow = !isMobile;
       if(!isMobile){ sun.shadow.mapSize.set(1024,1024); }
@@ -271,33 +321,56 @@
       addEventListener('pointerdown', onPointerDown, {passive:false});
       addEventListener('pointermove', onPointerMove, {passive:false});
       addEventListener('pointerup', onPointerUp, {passive:false});
-      addEventListener('pointercancel', onPointerUp, {passive:false});
+      addEventListener('pointercancel', onPointerCancel, {passive:false});
       addEventListener('resize', onResize);
       onResize();
     }
 
-    /* ======= Robot ======= */
+    /* ======= Robot: pill-shaped torso + shoulders, tight joints ======= */
     function makeRobot(){
       const m=(g,mat=MAT_BODY)=>{ const mesh=new THREE.Mesh(g,mat); mesh.castShadow=!isMobile; mesh.receiveShadow=!isMobile; return mesh; };
       const g=new THREE.Group();
 
-      const torso=m(G_TORSO); g.add(torso);
-      const shoulder=m(G_SHOULDER, MAT_BODY); shoulder.position.y=.7; torso.add(shoulder);
+      const torso=m(G_TORSO_CAP); g.add(torso);
+
+      const shoulder=m(G_SHOULDER_CAP, MAT_BODY);
+      shoulder.position.y=.7;
+      shoulder.rotation.z = Math.PI/2;
+      torso.add(shoulder);
 
       const head=m(G_HEAD, MAT_BODY); head.position.y=1.05; torso.add(head);
       const neck=m(G_NECK, MAT_BODY); neck.position.set(0,.85,0); torso.add(neck);
       const visor=m(G_VISOR, MAT_VISOR); visor.position.set(0,1.05,.23); torso.add(visor);
 
-      const limb=(side,y,upperLen=.6,lowerLen=.5)=>{
+      function limb(side,y,upperGeom,lowerGeom){
         const grp=new THREE.Group();
-        const shoulderJoint=m(G_JOINT, MAT_JOINT); shoulderJoint.position.set(side*.55, y, 0); grp.add(shoulderJoint);
-        const up=m(G_CAPS_UP, MAT_BODY); up.position.y=-upperLen/2-.02; shoulderJoint.add(up);
-        const elbow=m(G_JOINT, MAT_JOINT); elbow.position.y=-upperLen-.05; up.add(elbow);
-        const lo=m(G_CAPS_LO, MAT_BODY); lo.position.y=-(lowerLen/2+.02); elbow.add(lo);
+        const shoulderJoint=m(G_JOINT, MAT_JOINT);
+        shoulderJoint.position.set(side*.55, y, 0);
+        grp.add(shoulderJoint);
+
+        const up=m(upperGeom, MAT_BODY);
+        const upR = upperGeom.parameters.radius;
+        const upLen = upperGeom.parameters.length;
+        up.position.y = -( (JOINT_R - EPS) + (upLen/2 + upR) );
+        shoulderJoint.add(up);
+
+        const elbow=m(G_JOINT, MAT_JOINT);
+        elbow.position.y = - (upLen/2 + upR) - (JOINT_R - EPS);
+        up.add(elbow);
+
+        const lo=m(lowerGeom, MAT_BODY);
+        const loR = lowerGeom.parameters.radius;
+        const loLen = lowerGeom.parameters.length;
+        lo.position.y = - ( (JOINT_R - EPS) + (loLen/2 + loR) );
+        elbow.add(lo);
+
         return{grp, up, lo};
       };
 
-      const la=limb( 1,.45), ra=limb(-1,.45), ll=limb(.28,-.55,.65,.55), rl=limb(-.28,-.55,.65,.55);
+      const la=limb( 1,.45, G_CAPS_UP_ARM, G_CAPS_LO_ARM);
+      const ra=limb(-1,.45, G_CAPS_UP_ARM, G_CAPS_LO_ARM);
+      const ll=limb( .28,-.55, G_CAPS_UP_LEG, G_CAPS_LO_LEG);
+      const rl=limb(-.28,-.55, G_CAPS_UP_LEG, G_CAPS_LO_LEG);
       torso.add(la.grp,ra.grp,ll.grp,rl.grp);
 
       g.userData={ leftArm:la,rightArm:ra,leftLeg:ll,rightLeg:rl };
@@ -305,38 +378,67 @@
       return g;
     }
 
-    /* ======= Input Helpers ======= */
+    /* ======= Input Helpers (Dual-Touch) ======= */
     function isInLinksArea(target){ return target && target.closest && target.closest('#links'); }
+
+    function registerTouch(e){
+      touches.set(e.pointerId, { x0:e.clientX, y0:e.clientY, t0:performance.now(), x:e.clientX, y:e.clientY, moved:false });
+    }
+    function updateTouch(e){
+      const t = touches.get(e.pointerId);
+      if(!t) return;
+      t.x = e.clientX; t.y = e.clientY;
+      const dx = t.x - t.x0, dy = t.y - t.y0;
+      if(dx*dx + dy*dy > 64) t.moved = true;
+    }
+    function clearTouch(e){ touches.delete(e.pointerId); }
+
     function onPointerDown(e){
       if(useSwipe && (e.pointerType === 'touch' || e.pointerType === 'pen')){
         if (isInLinksArea(e.target)) return;
-        dragging = true; moved = false;
-        startX = lastX = e.clientX; startY = e.clientY; startTime = performance.now();
+        if(steerId === null){ steerId = e.pointerId; }
+        registerTouch(e);
         e.preventDefault();
-      }else{ shoot(); }
+      }else{
+        shoot();
+      }
     }
+
     function onPointerMove(e){
       if(useSwipe && (e.pointerType === 'touch' || e.pointerType === 'pen')){
-        if(!dragging) return;
-        const dx = e.clientX - lastX;
-        lastX = e.clientX;
-        if(Math.abs(e.clientX - startX) > 8 || Math.abs(e.clientY - startY) > 8) moved = true;
-        rotTarget = Math.max(-ROT_CLAMP, Math.min(ROT_CLAMP, rotTarget - dx * TOUCH_SENS));
-        e.preventDefault();
+        updateTouch(e);
+        if(e.pointerId === steerId){
+          const t = touches.get(steerId);
+          if(!t) return;
+          const dx = e.movementX !== undefined ? e.movementX : (e.clientX - (t.prevX ?? e.clientX));
+          t.prevX = e.clientX;
+          rotTarget = Math.max(-ROT_CLAMP, Math.min(ROT_CLAMP, rotTarget - dx * TOUCH_SENS));
+          e.preventDefault();
+        }
       }else{
         mouseX = e.clientX;
       }
     }
+
     function onPointerUp(e){
       if(useSwipe && (e.pointerType === 'touch' || e.pointerType === 'pen')){
-        const dt = performance.now() - startTime;
-        const dx = e.clientX - startX, dy = e.clientY - startY;
-        const tap = !moved && (dx*dx + dy*dy) < (18*18) && dt < 260;
-        if(tap && !isInLinksArea(e.target)) shoot();
-        dragging = false;
-        e.preventDefault();
+        const t = touches.get(e.pointerId);
+        if(t){
+          const dt = performance.now() - t.t0;
+          const dx = t.x - t.x0, dy = t.y - t.y0;
+          const isTap = !t.moved && (dx*dx + dy*dy) < TAP_DIST2 && dt < TAP_TIME;
+          if(e.pointerId !== steerId){
+            if(isTap && !isInLinksArea(e.target)) shoot();
+          }else{
+            if(isTap && !isInLinksArea(e.target)) shoot();
+            steerId = null;
+          }
+          clearTouch(e);
+          e.preventDefault();
+        }
       }
     }
+    function onPointerCancel(e){ if(e.pointerId === steerId) steerId = null; clearTouch(e); }
 
     function onResize(){
       const a = innerWidth/innerHeight;
@@ -378,15 +480,15 @@
       scene.add(beam); beams.push(beam);
     }
 
-    /* ======= City Chunks ======= */
+    /* ======= City Chunks (Layering: Robots > Outlines > Grid) ======= */
     function makeGrid(cx,cz){
-      const g = new THREE.GridHelper(CHUNK_SIZE*2, 20, 0x77ffff, 0x9933ff);
+      const g = new THREE.GridHelper(CHUNK_SIZE*2, 20, GRID_COLOR, GRID_COLOR); // einfarbig
       g.position.set(cx*CHUNK_SIZE, -0.02, cz*CHUNK_SIZE);
       g.material.transparent = true; g.material.opacity = .72;
-      g.material.depthWrite = false;      // schreibt NICHT in Z → übermalt nichts
-      g.material.depthTest  = true;       // respektiert vorhandene Z (Roboter/Outlines)
+      g.material.depthWrite = false;      // schreibt NICHT in Z
+      g.material.depthTest  = true;       // respektiert vorhandene Z
       g.material.fog = true;
-      g.renderOrder = -1000;              // extrem früh im transparenten Sortierblock
+      g.renderOrder = -1000;
       scene.add(g); gridChunks.set(key(cx,cz), g);
     }
 
@@ -466,17 +568,17 @@
       inst.instanceMatrix.needsUpdate = true;
       group.add(inst);
 
-      // Outlines: schreiben in die Tiefe → überlagern Grid zuverlässig
+      // Outlines: in Tiefe schreiben → überlagern Grid zuverlässig
       for(const [col, list] of colorBuckets){
         if(!list.length) continue;
         const merged = mergeGeometries(list, false);
         const lnMat = new THREE.LineBasicMaterial({color:col});
-        lnMat.depthWrite = true;        // <-- wichtig
+        lnMat.depthWrite = true;
         lnMat.depthTest  = true;
         lnMat.toneMapped = false;
         lnMat.fog = true;
         const ln = new THREE.LineSegments(merged, lnMat);
-        ln.renderOrder = -100;          // beliebig unterhalb transparenter Effekte
+        ln.renderOrder = -100;
         group.add(ln);
       }
 
@@ -495,7 +597,6 @@
       npc.userData.deathMeshes = meshes;
       npc.userData.deathOrigMats = mats;
 
-      // Kill-Counter
       kills++; if(killsEl) killsEl.textContent = String(kills);
     }
 
@@ -542,15 +643,12 @@
       autoResolution(dt);
       tuneNpcBudget();
 
-      // Steuerung
       const rotFactor = -Math.PI * 3.2;
       if(!useSwipe){ rotTarget = ((mouseX - innerWidth/2) / (innerWidth/2)) * rotFactor; }
       player.rotation.y += (rotTarget - player.rotation.y) * 0.1;
 
-      // Bewegung
       player.translateZ(-RUN_SPEED*dt);
 
-      // Spieler-Animation
       const swing = Math.sin(t*6)*.5, bend = Math.max(0,Math.sin(t*6))*.5;
       const ud = player.userData;
       ud.leftLeg.up.rotation.x  = swing;
@@ -560,7 +658,6 @@
       ud.leftArm.up.rotation.x  = -swing*.6;
       ud.rightArm.up.rotation.x =  swing*.6;
 
-      // NPCs
       for(let i=npcs.length-1;i>=0;i--){
         const n = npcs[i];
         if (!n.visible && !n.userData.dying) continue;
@@ -589,7 +686,6 @@
           n.translateZ(-n.userData.speed*dt);
           if(Math.random()<.01) n.rotation.y += (Math.random()-.5)*Math.PI/2;
 
-          // optionale Geh-Animation bei guter Performance
           if (msAvg < 22){
             const ph = t*6 + n.userData.phase;
             const sw = Math.sin(ph)*.45;
@@ -622,7 +718,6 @@
         const mv = TMP_V1.copy(b.userData.dir).multiplyScalar(LASER_SPEED*dt);
         b.position.add(mv);
         b.userData.traveled += mv.length();
-
         for(let j=npcs.length-1;j>=0;j--){
           const npc=npcs[j];
           if(!npc.visible || npc.userData.dying) continue;
