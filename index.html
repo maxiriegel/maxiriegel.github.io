@@ -4,74 +4,78 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>🤖 Homepage | Maxi Riegel</title>
-  <!-- Retro/8-bit readable font -->
   <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
   <style>
     :root{
-      --fg:#fff;
-      --accent:#00ffff;
-      --bg:#000;
-      --ui-font:'VT323', monospace;
-      /* Desktop baseline */
-      --ui-size:clamp(18px,3.6vw,26px);
-      --hud-size:clamp(18px,3.6vw,26px);
+      --fg:#fff; --accent:#00ffff; --bg:#000; --ui-font:'VT323', monospace;
+      --ui-size:clamp(18px,3.6vw,26px);  /* Basisgröße für Links & HUD */
+      --edge-pad:20px;                    /* Abstand zu den Rändern */
+      --row-gap:clamp(12px,3.8vw,28px);  /* Horizontaler Abstand zwischen den 3 Boxen */
     }
-    @media (pointer: coarse){
-      :root{
-        --ui-size:clamp(20px,5.4vw,28px);
-        --hud-size:clamp(22px,5.8vw,30px);
-      }
+    @media (pointer:coarse){
+      :root{ --ui-size:clamp(20px,5.4vw,28px); --row-gap:clamp(14px,5vw,32px); }
     }
     @media (max-width:380px) and (pointer:coarse){
-      :root{
-        --ui-size:clamp(19px,5.8vw,27px);
-        --hud-size:clamp(21px,6.2vw,29px);
-      }
+      :root{ --ui-size:clamp(19px,5.8vw,27px); --row-gap:clamp(10px,5.6vw,22px); }
     }
     @media (orientation:landscape) and (pointer:coarse){
-      :root{
-        --ui-size:clamp(16px,3.6vh,22px);
-        --hud-size:clamp(18px,4.0vh,24px);
-      }
+      :root{ --ui-size:clamp(16px,3.6vh,22px); }
     }
 
     *{box-sizing:border-box}
     html,body{height:100%}
     body{
-      margin:0;overflow:hidden;background:#000;
-      font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--fg);
-      touch-action: none;
+      margin:0; overflow:hidden; background:#000;
+      font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif; color:var(--fg);
+      touch-action: none; /* Gestensteuerung auf Touch */
     }
+    @supports (height: 100svh){ html,body{height:100svh} }
     canvas{display:block}
 
-    @supports (height: 100svh){
-      html,body{height:100svh}
-    }
-
-    #kills{
-      position:absolute;left:50%;transform:translateX(-50%);
-      top:calc(env(safe-area-inset-top, 0px) + 10px);
-      font-family:var(--ui-font);font-size:var(--hud-size);line-height:1;
-      color:#ffffff;opacity:.95;letter-spacing:.02em;
+    /* Oberes HUD: 3 Elemente (Maxi | Kills | Riegel) enger zusammen, Abstand zum Rand wie zuvor */
+    #hud{
+      position:absolute; left:0; right:0;
+      top:calc(env(safe-area-inset-top, 0px) + var(--edge-pad));
+      display:flex; justify-content:center; align-items:center; gap:var(--row-gap);
+      padding-left:max(0px, env(safe-area-inset-left));
+      padding-right:max(0px, env(safe-area-inset-right));
+      font-family:var(--ui-font); font-size:var(--ui-size); line-height:1;
+      color:#fff; opacity:.95; letter-spacing:.02em;
       text-shadow:0 0 10px rgba(0,255,255,.5), 0 0 2px rgba(0,0,0,.8);
-      z-index:110;pointer-events:none;
+      z-index:110; pointer-events:none;
     }
 
+    /* Untere Links: gleiche horizontale Verdichtung, gleicher Randabstand */
     #links{
-      position:absolute;bottom:10px;width:100%;text-align:center;z-index:100;pointer-events:auto;
-      padding-bottom:calc(max(10px, env(safe-area-inset-bottom, 0px)));
+      position:absolute; left:0; right:0; bottom:0;
+      display:flex; justify-content:center; align-items:center; gap:var(--row-gap);
+      padding-bottom:calc(max(var(--edge-pad), env(safe-area-inset-bottom, 0px)));
       padding-left:max(0px, env(safe-area-inset-left, 0px));
       padding-right:max(0px, env(safe-area-inset-right, 0px));
+      z-index:100; pointer-events:auto;
       font-family:var(--ui-font);
     }
     #links a{
-      color:#fff;text-decoration:none;margin:0 15px;
-      font-size:var(--ui-size);line-height:1;
-      letter-spacing:.02em;
+      color:#fff; text-decoration:none; margin:0;
+      font-size:var(--ui-size); line-height:1; letter-spacing:.02em;
       text-shadow:0 0 6px rgba(0,255,255,.35), 0 0 2px rgba(0,0,0,.8);
       transition:transform .15s ease, color .15s ease, text-shadow .15s ease;
     }
-    #links a:hover{color:#0ff; transform:translateY(-1px); text-shadow:0 0 10px rgba(0,255,255,.6) }
+    #links a:hover{ color:#0ff; transform:translateY(-1px); text-shadow:0 0 10px rgba(0,255,255,.6) }
+
+    /* Fallback-Overlay */
+    #compat{
+      position:fixed; inset:0; display:none; align-items:center; justify-content:center;
+      background:linear-gradient(180deg, #0b1425, #0e1a32);
+      color:#e9f2ff; font-family:system-ui,Segoe UI,Roboto,sans-serif; text-align:center; padding:24px;
+      z-index:9999;
+    }
+    #compat .box{
+      max-width:560px; border:1px solid rgba(255,255,255,.15); border-radius:12px;
+      padding:20px 18px; background:rgba(0,0,0,.35); box-shadow:0 10px 40px rgba(0,0,0,.35);
+    }
+    #compat h1{margin:0 0 8px; font-size:20px}
+    #compat p{margin:10px 0; opacity:.9; font-size:14px; line-height:1.4}
   </style>
 
   <script async src="https://ga.jspm.io/npm:es-module-shims@1.6.3/dist/es-module-shims.js"></script>
@@ -85,12 +89,26 @@
   </script>
 </head>
 <body>
-  <div id="kills">0</div>
+  <!-- HUD mit 3 Elementen (zentriert) -->
+  <div id="hud">
+    <span id="hudLeft">Maxi</span>
+    <span id="hudKills">0</span>
+    <span id="hudRight">Riegel</span>
+  </div>
 
+  <!-- Drei Links unten, Zentren deckungsgleich mit HUD-Elementen -->
   <div id="links">
     <a href="https://www.linkedin.com/in/maximilianluisriegel/" target="_blank" rel="noopener">LinkedIn</a>
     <a href="https://github.com/maxiriegel"                     target="_blank" rel="noopener">GitHub</a>
     <a href="mailto:maximilianluis.riegel@gmail.com">E-Mail</a>
+  </div>
+
+  <div id="compat">
+    <div class="box">
+      <h1>Dein Browser unterstützt die 3D-Darstellung nicht optimal.</h1>
+      <p>Bitte nutze die aktuelle Version von Chrome, Edge, Firefox oder Safari. Falls du im privaten Modus mit stark einschränkendem Tracking-/Script-Blocker surfst, erlaube “WebGL/Hardwarebeschleunigung”.</p>
+      <p>Auf Mobilgeräten hilft es oft, die Seite neu zu laden oder die App zu schließen und neu zu starten.</p>
+    </div>
   </div>
 
   <script type="module">
@@ -98,10 +116,23 @@
     import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
     import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
+    /* ===== Feature detection ===== */
+    const compatEl = document.getElementById('compat');
+    const hasWebGL = (()=>{
+      try{
+        const c=document.createElement('canvas');
+        return !!(c.getContext('webgl2')) || !!(c.getContext('webgl'));
+      }catch(e){ return false; }
+    })();
+    if(!hasWebGL){
+      compatEl.style.display='flex';
+      throw new Error('WebGL not supported');
+    }
+
     /* ======= Konstanten ======= */
     const CHUNK_SIZE   = 200;
     const ACTIVE_RADIUS= 2;
-    const isMobile     = /Mobi|Android/i.test(navigator.userAgent);
+    const isMobile     = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
     // Spieler & NPCs
     const RUN_SPEED = 12;
@@ -118,7 +149,7 @@
     const LASER_GLOW_COL = 0xff2200;
     const MAX_BEAMS      = 24;
 
-    // Grid Farbe (einfarbig, überall gleich)
+    // Grid (einfarbig, konsistent)
     const GRID_COLOR = 0x66ccff;
 
     // Render-Qualität
@@ -128,128 +159,82 @@
     let scene, camera, renderer, player;
     let camOffset = new THREE.Vector3(0,3.2,7.2), lookY = 2.2;
     const clock = new THREE.Clock();
-
-    // State
-    const beams=[];
-    const beamPool=[];
-    const npcs=[];
-    const explosions=[];
-
-    // HUD
-    let kills = 0;
-    const killsEl = document.getElementById('kills');
-
-    // World streaming
-    const gridChunks = new Map();
-    const cityChunks = new Map();
-    const active = new Set();
+    const beams=[], beamPool=[], npcs=[], explosions=[];
+    let kills = 0; const killsEl = document.getElementById('hudKills');
+    const gridChunks = new Map(), cityChunks = new Map(), active = new Set();
     const key = (x,z)=>`${x},${z}`;
 
     // Input
     let mouseX = innerWidth/2;
-    const useSwipe = (('ontouchstart' in window) || navigator.maxTouchPoints > 0 || matchMedia('(pointer: coarse)').matches);
-    let rotTarget = 0;
-    const ROT_CLAMP = Math.PI * 3.2;
-    const TOUCH_SENS = 0.007;
+    const useSwipe = (('PointerEvent' in window && (navigator.maxTouchPoints||0)>0) || matchMedia('(pointer: coarse)').matches);
+    let rotTarget = 0; const ROT_CLAMP = Math.PI * 3.2; const TOUCH_SENS = 0.007;
 
-    // Dual-Touch
+    // Dual-Touch (PointerEvents) oder TouchEvents-Fallback
     let steerId = null;
-    const touches = new Map();
-    const TAP_DIST2 = 18*18;
-    const TAP_TIME  = 260;
+    const touches = new Map(); // id -> {x0,y0,t0,x,y,moved,prevX}
+    const TAP_DIST2 = 18*18, TAP_TIME = 260;
 
     // Temp Vektoren
-    const TMP_V1 = new THREE.Vector3();
-    const TMP_V2 = new THREE.Vector3();
+    const TMP_V1 = new THREE.Vector3(); const TMP_V2 = new THREE.Vector3();
 
     // Adaptive Performance
-    let msAvg = 16, resCooldown = 0;
-    const NPC_MAX = NPC_COUNT;
-    let npcBudget = NPC_MAX;
+    let msAvg = 16, resCooldown = 0; const NPC_MAX = NPC_COUNT; let npcBudget = NPC_MAX;
 
-    // Laser: Geometrien/Materialien
+    // Laser resources
     const LASER_CORE_GEOM = new THREE.CylinderGeometry(LASER_CORE_R, LASER_CORE_R, 1, 20, 1, true);
     const LASER_GLOW_GEOM = new THREE.CylinderGeometry(LASER_GLOW_R, LASER_GLOW_R, 1, 12, 1, true);
     const LASER_CORE_MAT  = new THREE.MeshBasicMaterial({ color:LASER_CORE_COL, transparent:true, opacity:1.0, blending:THREE.AdditiveBlending, depthWrite:false, toneMapped:false });
-    const LASER_GLOW_MAT  = new THREE.MeshBasicMaterial({ color:LASER_GLOW_COL, transparent:true, opacity:0.32, blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide, toneMapped:false });
-
+    const LASER_GLOW_MAT  = new THREE.MeshBasicMaterial({ color:LASER_GLOW_COL, transparent:true, opacity:0.34, blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide, toneMapped:false });
     const EXPLO_MAT  = new THREE.SpriteMaterial({color:0xff6600, transparent:true, opacity:1, blending:THREE.AdditiveBlending, toneMapped:false});
 
     // Neon-Palette
-    const NEON = [
-      0x00ffff, 0xff00ff, 0x55ff88, 0xffff66, 0xff7a33,
-      0xff3366, 0x66ccff, 0xff66cc, 0xaaff00, 0xffdd55
-    ];
+    const NEON = [ 0x00ffff,0xff00ff,0x55ff88,0xffff66,0xff7a33,0xff3366,0x66ccff,0xff66cc,0xaaff00,0xffdd55 ];
 
-    /* ======= Materialien/Geometrien für Bot (heller Chrome/Mercury Look) ======= */
+    /* ======= Chrome/Mercury Materials (hell) ======= */
     const MAT_BODY  = new THREE.MeshPhysicalMaterial({
-      color:0xf2f6ff,               // heller Grundton
-      metalness:1.0, roughness:0.022,
-      clearcoat:1.0, clearcoatRoughness:0.015,
-      ior:1.45, envMapIntensity:2.15   // kräftigere Spiegelungen
+      color:0xf5f8ff, metalness:1.0, roughness:0.018,
+      clearcoat:1.0, clearcoatRoughness:0.012, ior:1.46, envMapIntensity:2.3
     });
     const MAT_JOINT = new THREE.MeshPhysicalMaterial({
-      color:0xf9fbff,
-      metalness:1.0, roughness:0.032,
-      clearcoat:1.0, clearcoatRoughness:0.02,
-      ior:1.45, envMapIntensity:1.9
+      color:0xffffff, metalness:1.0, roughness:0.028,
+      clearcoat:1.0, clearcoatRoughness:0.018, ior:1.46, envMapIntensity:2.0
     });
-    const MAT_VISOR = new THREE.MeshStandardMaterial({ color:0x0f1623, emissive:0x44caff, emissiveIntensity:1.7, metalness:.9, roughness:.2 });
+    const MAT_VISOR = new THREE.MeshStandardMaterial({ color:0x0f1623, emissive:0x44caff, emissiveIntensity:1.75, metalness:.9, roughness:.2 });
 
     // Capsule geometries
     const G_TORSO_CAP   = new THREE.CapsuleGeometry(0.34, 0.9, 6, 12);
     const G_SHOULDER_CAP= new THREE.CapsuleGeometry(0.18, 0.9, 6, 12);
-
     const G_HEAD     = new THREE.SphereGeometry(.38, 20, 16);
     const G_NECK     = new THREE.CylinderGeometry(.08,.08,.3, 16);
     const G_VISOR    = new THREE.BoxGeometry(.52,.18,.03);
-
     const JOINT_R    = .14;
     const UP_R_ARM   = .12, LO_R_ARM = .11;
     const UP_R_LEG   = .12, LO_R_LEG = .11;
     const EPS        = .005;
-
     const G_JOINT    = new THREE.SphereGeometry(JOINT_R, 18, 14);
-    const G_CAPS_UP_ARM = new THREE.CapsuleGeometry(UP_R_ARM, .52, 8, 12); // verkürzt
-    const G_CAPS_LO_ARM = new THREE.CapsuleGeometry(LO_R_ARM, .42, 8, 12); // verkürzt
+    const G_CAPS_UP_ARM = new THREE.CapsuleGeometry(UP_R_ARM, .52, 8, 12);
+    const G_CAPS_LO_ARM = new THREE.CapsuleGeometry(LO_R_ARM, .42, 8, 12);
     const G_CAPS_UP_LEG = new THREE.CapsuleGeometry(UP_R_LEG, .65, 8, 12);
     const G_CAPS_LO_LEG = new THREE.CapsuleGeometry(LO_R_LEG, .55, 8, 12);
-    // keine Füße
 
-    /* ======= Blink-Death Parameter ======= */
-    const BLINK_COUNT    = 3;
-    const BLINK_INTERVAL = 0.12;
-    const SINK_SPEED     = 10.0;
-    const RED_FLASH_MAT  = new THREE.MeshBasicMaterial({ color:0xff0000, toneMapped:false });
+    /* ======= Blink-Death ======= */
+    const BLINK_COUNT=3, BLINK_INTERVAL=0.12, SINK_SPEED=10.0;
+    const RED_FLASH_MAT = new THREE.MeshBasicMaterial({ color:0xff0000, toneMapped:false });
 
-    /* ======= Runde, rote Beacon ======= */
     function makeDiscTexture(size=64){
-      const c = document.createElement('canvas');
-      c.width = c.height = size;
+      const c = document.createElement('canvas'); c.width=c.height=size;
       const ctx = c.getContext('2d');
-      const g = ctx.createRadialGradient(size/2,size/2,0, size/2,size/2,size/2);
-      g.addColorStop(0.0, 'rgba(255,0,0,1)');
-      g.addColorStop(0.5, 'rgba(255,0,0,0.85)');
-      g.addColorStop(1.0, 'rgba(255,0,0,0)');
-      ctx.fillStyle = g;
-      ctx.fillRect(0,0,size,size);
-      const tex = new THREE.CanvasTexture(c);
-      tex.colorSpace = THREE.SRGBColorSpace;
-      return tex;
+      const g = ctx.createRadialGradient(size/2,size/2,0,size/2,size/2,size/2);
+      g.addColorStop(0.0,'rgba(255,0,0,1)'); g.addColorStop(0.5,'rgba(255,0,0,0.85)'); g.addColorStop(1.0,'rgba(255,0,0,0)');
+      ctx.fillStyle=g; ctx.fillRect(0,0,size,size);
+      const tex=new THREE.CanvasTexture(c); tex.colorSpace=THREE.SRGBColorSpace; return tex;
     }
     const BEACON_TEX = makeDiscTexture();
 
-    /* ======= Deterministisches 2D-Random ======= */
-    function rand2(i,j){
-      let h = (i*374761393) ^ (j*668265263);
-      h = (h ^ (h>>>13)) * 1274126177;
-      h = (h ^ (h>>>16)) >>> 0;
-      return h / 4294967296;
-    }
+    function rand2(i,j){ let h=(i*374761393)^(j*668265263); h=(h^(h>>>13))*1274126177; h=(h^(h>>>16))>>>0; return h/4294967296; }
 
     /* ======= Init ======= */
-    init();
-    animate();
+    init(); animate();
 
     function init(){
       scene = new THREE.Scene();
@@ -261,7 +246,7 @@
       renderer = new THREE.WebGLRenderer({
         antialias: !isMobile,
         powerPreference:'high-performance',
-        alpha:false, stencil:false
+        alpha:false, stencil:false, preserveDrawingBuffer:false
       });
       renderer.physicallyCorrectLights = true;
       renderer.setSize(innerWidth, innerHeight);
@@ -269,28 +254,19 @@
       renderer.shadowMap.enabled = !isMobile;
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.38; // Szene insgesamt konstant, Roboter via envMap heller
+      renderer.toneMappingExposure = 1.38;
       document.body.appendChild(renderer.domElement);
 
-      // Environment für Chrome-Look
       const pmrem = new THREE.PMREMGenerator(renderer);
       const envTex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
       scene.environment = envTex;
 
-      // Lighting
-      const hemi = new THREE.HemisphereLight(0x7aa1ff, 0x220022, 2.0);
-      scene.add(hemi);
-      const sun = new THREE.DirectionalLight(0xffffff, 2.0);
-      sun.position.set(12,22,14);
-      sun.castShadow = !isMobile;
-      if(!isMobile){ sun.shadow.mapSize.set(1024,1024); }
-      scene.add(sun);
+      const hemi = new THREE.HemisphereLight(0x7aa1ff, 0x220022, 2.0); scene.add(hemi);
+      const sun = new THREE.DirectionalLight(0xffffff, 2.0); sun.position.set(12,22,14);
+      sun.castShadow = !isMobile; if(!isMobile){ sun.shadow.mapSize.set(1024,1024); } scene.add(sun);
 
-      // Player
-      player = makeRobot();
-      scene.add(player);
+      player = makeRobot(); scene.add(player);
 
-      // NPCs
       for(let i=0;i<NPC_COUNT;i++){
         const n = makeRobot();
         const s = 0.9 + Math.random()*1.8;
@@ -300,145 +276,139 @@
         n.rotation.y = Math.random()*Math.PI*2;
         n.userData.speed = NPC_SPEED;
         n.userData.phase = Math.random()*Math.PI*2;
-
         const beaconMat = new THREE.SpriteMaterial({
           map: BEACON_TEX, transparent: true, opacity: 0.75,
           blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false
         });
         const beacon = new THREE.Sprite(beaconMat);
         beacon.position.set(0, 2*s, 0);
-        const base = .5*s;
-        beacon.scale.setScalar(base);
-        n.add(beacon);
-        n.userData.beacon = beacon;
-        n.userData.beaconBase = base;
-
+        const base = .5*s; beacon.scale.setScalar(base);
+        n.add(beacon); n.userData.beacon = beacon; n.userData.beaconBase = base;
         scene.add(n); npcs.push(n);
       }
       applyNpcBudget();
 
-      // Pointer-Events
-      addEventListener('pointerdown', onPointerDown, {passive:false});
-      addEventListener('pointermove', onPointerMove, {passive:false});
-      addEventListener('pointerup', onPointerUp, {passive:false});
-      addEventListener('pointercancel', onPointerCancel, {passive:false});
+      // Input handlers (PointerEvents if verfügbar, sonst Touch-Fallback)
+      if('PointerEvent' in window){
+        addEventListener('pointerdown', onPointerDown, {passive:false});
+        addEventListener('pointermove', onPointerMove, {passive:false});
+        addEventListener('pointerup', onPointerUp, {passive:false});
+        addEventListener('pointercancel', onPointerCancel, {passive:false});
+      }else{
+        addEventListener('touchstart', onTouchStart, {passive:false});
+        addEventListener('touchmove', onTouchMove, {passive:false});
+        addEventListener('touchend', onTouchEnd, {passive:false});
+        addEventListener('touchcancel', onTouchCancel, {passive:false});
+      }
       addEventListener('resize', onResize);
       onResize();
     }
 
-    /* ======= Robot: pill-shaped torso + shoulders, tight joints ======= */
+    /* ======= Robot builder ======= */
     function makeRobot(){
       const m=(g,mat=MAT_BODY)=>{ const mesh=new THREE.Mesh(g,mat); mesh.castShadow=!isMobile; mesh.receiveShadow=!isMobile; return mesh; };
       const g=new THREE.Group();
-
       const torso=m(G_TORSO_CAP); g.add(torso);
-
-      const shoulder=m(G_SHOULDER_CAP, MAT_BODY);
-      shoulder.position.y=.7;
-      shoulder.rotation.z = Math.PI/2;
-      torso.add(shoulder);
-
+      const shoulder=m(G_SHOULDER_CAP, MAT_BODY); shoulder.position.y=.7; shoulder.rotation.z=Math.PI/2; torso.add(shoulder);
       const head=m(G_HEAD, MAT_BODY); head.position.y=1.05; torso.add(head);
       const neck=m(G_NECK, MAT_BODY); neck.position.set(0,.85,0); torso.add(neck);
       const visor=m(G_VISOR, MAT_VISOR); visor.position.set(0,1.05,.23); torso.add(visor);
 
       function limb(side,y,upperGeom,lowerGeom){
         const grp=new THREE.Group();
-        const shoulderJoint=m(G_JOINT, MAT_JOINT);
-        shoulderJoint.position.set(side*.55, y, 0);
-        grp.add(shoulderJoint);
-
-        const up=m(upperGeom, MAT_BODY);
-        const upR = upperGeom.parameters.radius;
-        const upLen = upperGeom.parameters.length;
-        up.position.y = -( (JOINT_R - EPS) + (upLen/2 + upR) );
-        shoulderJoint.add(up);
-
-        const elbow=m(G_JOINT, MAT_JOINT);
-        elbow.position.y = - (upLen/2 + upR) - (JOINT_R - EPS);
-        up.add(elbow);
-
-        const lo=m(lowerGeom, MAT_BODY);
-        const loR = lowerGeom.parameters.radius;
-        const loLen = lowerGeom.parameters.length;
-        lo.position.y = - ( (JOINT_R - EPS) + (loLen/2 + loR) );
-        elbow.add(lo);
-
+        const shoulderJoint=m(G_JOINT, MAT_JOINT); shoulderJoint.position.set(side*.55, y, 0); grp.add(shoulderJoint);
+        const up=m(upperGeom, MAT_BODY); const upR=upperGeom.parameters.radius, upLen=upperGeom.parameters.length;
+        up.position.y = -((JOINT_R - EPS) + (upLen/2 + upR)); shoulderJoint.add(up);
+        const elbow=m(G_JOINT, MAT_JOINT); elbow.position.y = -(upLen/2 + upR) - (JOINT_R - EPS); up.add(elbow);
+        const lo=m(lowerGeom, MAT_BODY); const loR=lowerGeom.parameters.radius, loLen=lowerGeom.parameters.length;
+        lo.position.y = -((JOINT_R - EPS) + (loLen/2 + loR)); elbow.add(lo);
         return{grp, up, lo};
-      };
-
+      }
       const la=limb( 1,.45, G_CAPS_UP_ARM, G_CAPS_LO_ARM);
       const ra=limb(-1,.45, G_CAPS_UP_ARM, G_CAPS_LO_ARM);
       const ll=limb( .28,-.55, G_CAPS_UP_LEG, G_CAPS_LO_LEG);
       const rl=limb(-.28,-.55, G_CAPS_UP_LEG, G_CAPS_LO_LEG);
       torso.add(la.grp,ra.grp,ll.grp,rl.grp);
-
       g.userData={ leftArm:la,rightArm:ra,leftLeg:ll,rightLeg:rl };
       g.position.y=1.7;
       return g;
     }
 
-    /* ======= Input Helpers (Dual-Touch) ======= */
+    /* ======= Input (PointerEvents) ======= */
     function isInLinksArea(target){ return target && target.closest && target.closest('#links'); }
-
-    function registerTouch(e){
-      touches.set(e.pointerId, { x0:e.clientX, y0:e.clientY, t0:performance.now(), x:e.clientX, y:e.clientY, moved:false });
-    }
-    function updateTouch(e){
-      const t = touches.get(e.pointerId);
-      if(!t) return;
-      t.x = e.clientX; t.y = e.clientY;
-      const dx = t.x - t.x0, dy = t.y - t.y0;
-      if(dx*dx + dy*dy > 64) t.moved = true;
-    }
+    function registerTouch(e){ touches.set(e.pointerId, { x0:e.clientX, y0:e.clientY, t0:performance.now(), x:e.clientX, y:e.clientY, moved:false }); }
+    function updateTouch(e){ const t=touches.get(e.pointerId); if(!t) return; t.x=e.clientX; t.y=e.clientY; const dx=t.x-t.x0, dy=t.y-t.y0; if(dx*dx+dy*dy>64) t.moved=true; }
     function clearTouch(e){ touches.delete(e.pointerId); }
-
     function onPointerDown(e){
-      if(useSwipe && (e.pointerType === 'touch' || e.pointerType === 'pen')){
-        if (isInLinksArea(e.target)) return;
-        if(steerId === null){ steerId = e.pointerId; }
-        registerTouch(e);
-        e.preventDefault();
-      }else{
-        shoot();
-      }
+      if(useSwipe && (e.pointerType==='touch'||e.pointerType==='pen')){
+        if(isInLinksArea(e.target)) return;
+        if(steerId===null){ steerId=e.pointerId; }
+        registerTouch(e); e.preventDefault();
+      }else{ shoot(); }
     }
-
     function onPointerMove(e){
-      if(useSwipe && (e.pointerType === 'touch' || e.pointerType === 'pen')){
+      if(useSwipe && (e.pointerType==='touch'||e.pointerType==='pen')){
         updateTouch(e);
-        if(e.pointerId === steerId){
-          const t = touches.get(steerId);
-          if(!t) return;
-          const dx = e.movementX !== undefined ? e.movementX : (e.clientX - (t.prevX ?? e.clientX));
+        if(e.pointerId===steerId){
+          const t=touches.get(steerId); if(!t) return;
+          const dx = e.movementX!==undefined ? e.movementX : (e.clientX - (t.prevX ?? e.clientX));
           t.prevX = e.clientX;
           rotTarget = Math.max(-ROT_CLAMP, Math.min(ROT_CLAMP, rotTarget - dx * TOUCH_SENS));
           e.preventDefault();
         }
-      }else{
-        mouseX = e.clientX;
-      }
+      }else{ mouseX=e.clientX; }
     }
-
     function onPointerUp(e){
-      if(useSwipe && (e.pointerType === 'touch' || e.pointerType === 'pen')){
-        const t = touches.get(e.pointerId);
+      if(useSwipe && (e.pointerType==='touch'||e.pointerType==='pen')){
+        const t=touches.get(e.pointerId);
         if(t){
-          const dt = performance.now() - t.t0;
-          const dx = t.x - t.x0, dy = t.y - t.y0;
-          const isTap = !t.moved && (dx*dx + dy*dy) < TAP_DIST2 && dt < TAP_TIME;
-          if(e.pointerId !== steerId){
-            if(isTap && !isInLinksArea(e.target)) shoot();
-          }else{
-            if(isTap && !isInLinksArea(e.target)) shoot();
-            steerId = null;
-          }
-          clearTouch(e);
-          e.preventDefault();
+          const dt=performance.now()-t.t0; const dx=t.x-t.x0, dy=t.y-t.y0;
+          const isTap = !t.moved && (dx*dx+dy*dy)<TAP_DIST2 && dt<TAP_TIME;
+          if(e.pointerId!==steerId){ if(isTap && !isInLinksArea(e.target)) shoot(); }
+          else{ if(isTap && !isInLinksArea(e.target)) shoot(); steerId=null; }
+          clearTouch(e); e.preventDefault();
         }
       }
     }
-    function onPointerCancel(e){ if(e.pointerId === steerId) steerId = null; clearTouch(e); }
+    function onPointerCancel(e){ if(e.pointerId===steerId) steerId=null; clearTouch(e); }
+
+    /* ======= TouchEvents fallback (ältere Browser) ======= */
+    function onTouchStart(ev){
+      if(isInLinksArea(ev.target)) return;
+      const t = ev.changedTouches[0];
+      const id = t.identifier;
+      if(steerId===null) steerId=id;
+      touches.set(id,{ x0:t.clientX,y0:t.clientY,t0:performance.now(), x:t.clientX,y:t.clientY,moved:false, prevX:t.clientX });
+      ev.preventDefault();
+    }
+    function onTouchMove(ev){
+      const list = ev.changedTouches;
+      for(let k=0;k<list.length;k++){
+        const t = list[k];
+        if(t.identifier!==steerId) continue;
+        const obj = touches.get(steerId); if(!obj) continue;
+        const dx = t.clientX - (obj.prevX ?? t.clientX);
+        obj.prevX = t.clientX;
+        obj.x=t.clientX; obj.y=t.clientY;
+        const ddx = obj.x - obj.x0, ddy = obj.y - obj.y0;
+        if(ddx*ddx+ddy*ddy>64) obj.moved=true;
+        rotTarget = Math.max(-ROT_CLAMP, Math.min(ROT_CLAMP, rotTarget - dx * TOUCH_SENS));
+        ev.preventDefault();
+      }
+    }
+    function onTouchEnd(ev){
+      const list = ev.changedTouches;
+      for(let k=0;k<list.length;k++){
+        const t = list[k]; const id=t.identifier; const obj=touches.get(id); if(!obj) continue;
+        const dt=performance.now()-obj.t0; const dx=obj.x-obj.x0, dy=obj.y-obj.y0;
+        const isTap = !obj.moved && (dx*dx+dy*dy)<TAP_DIST2 && dt<TAP_TIME;
+        if(id!==steerId){ if(isTap && !isInLinksArea(ev.target)) shoot(); }
+        else{ if(isTap && !isInLinksArea(ev.target)) shoot(); steerId=null; }
+        touches.delete(id);
+      }
+      ev.preventDefault();
+    }
+    function onTouchCancel(ev){ const list=ev.changedTouches; for(let k=0;k<list.length;k++){ const id=list[k].identifier; touches.delete(id); if(id===steerId) steerId=null; } }
 
     function onResize(){
       const a = innerWidth/innerHeight;
@@ -452,20 +422,10 @@
 
     /* ======= Laser ======= */
     function acquireBeam(){
-      const grp = beamPool.pop() || (function(){
-        const g = new THREE.Group();
-        const core = new THREE.Mesh(LASER_CORE_GEOM, LASER_CORE_MAT.clone());
-        const glow = new THREE.Mesh(LASER_GLOW_GEOM, LASER_GLOW_MAT.clone());
-        core.name='core'; glow.name='glow';
-        g.add(glow); g.add(core);
-        return g;
-      })();
-      grp.scale.set(1, LASER_LEN_HALF, 1);
-      grp.userData.traveled = 0;
-      return grp;
+      const grp = beamPool.pop() || (function(){ const g=new THREE.Group(); const core=new THREE.Mesh(LASER_CORE_GEOM, LASER_CORE_MAT.clone()); const glow=new THREE.Mesh(LASER_GLOW_GEOM, LASER_GLOW_MAT.clone()); core.name='core'; glow.name='glow'; g.add(glow); g.add(core); return g; })();
+      grp.scale.set(1, LASER_LEN_HALF, 1); grp.userData.traveled=0; return grp;
     }
     function releaseBeam(b){ b.visible=false; scene.remove(b); beamPool.push(b); }
-
     function shoot(){
       if(beams.length>=MAX_BEAMS) return;
       const start = player.localToWorld(new THREE.Vector3(0,0.9,0));
@@ -480,108 +440,60 @@
       scene.add(beam); beams.push(beam);
     }
 
-    /* ======= City Chunks (Layering: Robots > Outlines > Grid) ======= */
+    /* ======= City (Robots > Outlines > Grid) ======= */
     function makeGrid(cx,cz){
-      const g = new THREE.GridHelper(CHUNK_SIZE*2, 20, GRID_COLOR, GRID_COLOR); // einfarbig
+      const g = new THREE.GridHelper(CHUNK_SIZE*2, 20, GRID_COLOR, GRID_COLOR);
       g.position.set(cx*CHUNK_SIZE, -0.02, cz*CHUNK_SIZE);
-      g.material.transparent = true; g.material.opacity = .72;
-      g.material.depthWrite = false;      // schreibt NICHT in Z
-      g.material.depthTest  = true;       // respektiert vorhandene Z
-      g.material.fog = true;
-      g.renderOrder = -1000;
+      g.material.transparent=true; g.material.opacity=.72;
+      g.material.depthWrite=false; g.material.depthTest=true; g.material.fog=true;
+      g.material.toneMapped=false;
+      g.renderOrder=-1000;
       scene.add(g); gridChunks.set(key(cx,cz), g);
     }
-
     function makeCity(cx,cz){
-      const group = new THREE.Group();
-      group.position.set(cx*CHUNK_SIZE,0,cz*CHUNK_SIZE);
-
+      const group=new THREE.Group(); group.position.set(cx*CHUNK_SIZE,0,cz*CHUNK_SIZE);
       const TILE=70, ROAD=16, SETBK=4, PLAZA_N=4;
-
-      const minX = group.position.x - CHUNK_SIZE/2;
-      const maxX = group.position.x + CHUNK_SIZE/2;
-      const minZ = group.position.z - CHUNK_SIZE/2;
-      const maxZ = group.position.z + CHUNK_SIZE/2;
-
-      const i0 = Math.floor(minX / TILE) - 1;
-      const i1 = Math.floor(maxX / TILE) + 1;
-      const j0 = Math.floor(minZ / TILE) - 1;
-      const j1 = Math.floor(maxZ / TILE) + 1;
-
-      const builds = [];
-      for(let i=i0; i<=i1; i++){
-        for(let j=j0; j<=j1; j++){
-          const cxw = (i + 0.5) * TILE;
-          const czw = (j + 0.5) * TILE;
-          const isPlaza = (i % PLAZA_N === 0) && (j % PLAZA_N === 0);
-          const r = rand2(i, j);
-          const occupied = !isPlaza && r > 0.25;
-          if(!occupied) continue;
-
-          const buildMax = TILE - ROAD - 2*SETBK;
-          const w = Math.max(10, buildMax * (0.55 + 0.35 * rand2(i+11, j+3)));
-          const d = Math.max(10, buildMax * (0.55 + 0.35 * rand2(i+7,  j+19)));
-          const baseH = 26, varH=90, bias = ((i & 1) === 0 && (j & 1) === 0) ? 1.15 : 1.0;
-          const h = baseH + varH * (0.35 + 0.65 * rand2(i+23, j+41)) * bias;
-
-          const px = cxw - group.position.x + (rand2(i+5, j+9)-0.5) * (buildMax - w);
-          const pz = czw - group.position.z + (rand2(i+13, j+27)-0.5) * (buildMax - d);
-
-          if (px - w/2 < -CHUNK_SIZE/2-5 || px + w/2 > CHUNK_SIZE/2+5 ||
-              pz - d/2 < -CHUNK_SIZE/2-5 || pz + d/2 > CHUNK_SIZE/2+5) continue;
-
+      const minX=group.position.x-CHUNK_SIZE/2, maxX=group.position.x+CHUNK_SIZE/2;
+      const minZ=group.position.z-CHUNK_SIZE/2, maxZ=group.position.z+CHUNK_SIZE/2;
+      const i0=Math.floor(minX/TILE)-1, i1=Math.floor(maxX/TILE)+1;
+      const j0=Math.floor(minZ/TILE)-1, j1=Math.floor(maxZ/TILE)+1;
+      const builds=[];
+      for(let i=i0;i<=i1;i++){
+        for(let j=j0;j<=j1;j++){
+          const cxw=(i+.5)*TILE, czw=(j+.5)*TILE;
+          const isPlaza=(i%PLAZA_N===0)&&(j%PLAZA_N===0);
+          const r=rand2(i,j); const occupied=!isPlaza && r>0.25; if(!occupied) continue;
+          const buildMax=TILE-ROAD-2*SETBK;
+          const w=Math.max(10, buildMax*(0.55+0.35*rand2(i+11,j+3)));
+          const d=Math.max(10, buildMax*(0.55+0.35*rand2(i+7, j+19)));
+          const baseH=26, varH=90, bias=((i&1)===0 && (j&1)===0)?1.15:1.0;
+          const h=baseH+varH*(0.35+0.65*rand2(i+23,j+41))*bias;
+          const px=cxw-group.position.x+(rand2(i+5,j+9)-.5)*(buildMax-w);
+          const pz=czw-group.position.z+(rand2(i+13,j+27)-.5)*(buildMax-d);
+          if(px-w/2<-CHUNK_SIZE/2-5||px+w/2>CHUNK_SIZE/2+5||pz-d/2<-CHUNK_SIZE/2-5||pz+d/2>CHUNK_SIZE/2+5) continue;
           builds.push({w,d,h,px,pz});
         }
       }
-
-      // Gebäude-Körper: transparent, ohne Z-Schreiben
-      const bodyMat = new THREE.MeshBasicMaterial({ color:0x0d0f22, transparent:true, opacity:.05 });
-      bodyMat.depthWrite = false;
-      bodyMat.polygonOffset = true;
-      bodyMat.polygonOffsetFactor = 1;
-      bodyMat.polygonOffsetUnits  = 1;
-
-      const baseGeom = new THREE.BoxGeometry(1,1,1);
-      const inst = new THREE.InstancedMesh(baseGeom, bodyMat, builds.length);
-      inst.castShadow=false; inst.receiveShadow=false;
-      inst.renderOrder = -2;
-      const colorBuckets = new Map();
-      for(const c of NEON) colorBuckets.set(c, []);
-
-      const m = new THREE.Matrix4();
-      const s = new THREE.Vector3();
-      const q = new THREE.Quaternion();
-      const p = new THREE.Vector3();
-
+      const bodyMat=new THREE.MeshBasicMaterial({ color:0x0d0f22, transparent:true, opacity:.05 });
+      bodyMat.depthWrite=false; bodyMat.polygonOffset=true; bodyMat.polygonOffsetFactor=1; bodyMat.polygonOffsetUnits=1;
+      const baseGeom=new THREE.BoxGeometry(1,1,1);
+      const inst=new THREE.InstancedMesh(baseGeom, bodyMat, builds.length); inst.castShadow=false; inst.receiveShadow=false; inst.renderOrder=-2;
+      const colorBuckets=new Map(); for(const c of NEON) colorBuckets.set(c, []);
+      const m=new THREE.Matrix4(), s=new THREE.Vector3(), q=new THREE.Quaternion(), p=new THREE.Vector3();
       for(let idx=0; idx<builds.length; idx++){
-        const {w,d,h,px,pz} = builds[idx];
-        p.set(px, h/2, pz); q.identity(); s.set(w, h, d);
-        m.compose(p,q,s);
-        inst.setMatrixAt(idx, m);
-
-        const eg = new THREE.EdgesGeometry(new THREE.BoxGeometry(w,h,d));
-        eg.applyMatrix4(new THREE.Matrix4().makeTranslation(px, h/2, pz));
-        const rr = rand2(Math.floor(px + group.position.x), Math.floor(pz + group.position.z));
-        const col = NEON[Math.floor(rr * NEON.length)];
-        colorBuckets.get(col).push(eg);
+        const {w,d,h,px,pz}=builds[idx]; p.set(px,h/2,pz); q.identity(); s.set(w,h,d); m.compose(p,q,s); inst.setMatrixAt(idx,m);
+        const eg=new THREE.EdgesGeometry(new THREE.BoxGeometry(w,h,d));
+        eg.applyMatrix4(new THREE.Matrix4().makeTranslation(px,h/2,pz));
+        const rr=rand2(Math.floor(px+group.position.x), Math.floor(pz+group.position.z));
+        const col=NEON[Math.floor(rr*NEON.length)]; colorBuckets.get(col).push(eg);
       }
-      inst.instanceMatrix.needsUpdate = true;
-      group.add(inst);
-
-      // Outlines: in Tiefe schreiben → überlagern Grid zuverlässig
-      for(const [col, list] of colorBuckets){
+      inst.instanceMatrix.needsUpdate=true; group.add(inst);
+      for(const [col,list] of colorBuckets){
         if(!list.length) continue;
-        const merged = mergeGeometries(list, false);
-        const lnMat = new THREE.LineBasicMaterial({color:col});
-        lnMat.depthWrite = true;
-        lnMat.depthTest  = true;
-        lnMat.toneMapped = false;
-        lnMat.fog = true;
-        const ln = new THREE.LineSegments(merged, lnMat);
-        ln.renderOrder = -100;
-        group.add(ln);
+        const merged=mergeGeometries(list,false);
+        const lnMat=new THREE.LineBasicMaterial({color:col}); lnMat.depthWrite=true; lnMat.depthTest=true; lnMat.toneMapped=false; lnMat.fog=true;
+        const ln=new THREE.LineSegments(merged, lnMat); ln.renderOrder=-100; group.add(ln);
       }
-
       scene.add(group); cityChunks.set(key(cx,cz), group);
     }
 
@@ -591,146 +503,92 @@
       if(npc.userData.beacon){ npc.remove(npc.userData.beacon); npc.userData.beacon = null; }
       npc.userData.dying = { start: timeNow, sinking: false, _lastOn: undefined };
       npc.userData.speed = 0;
-
-      const meshes = [], mats = [];
-      npc.traverse(o=>{ if(o.isMesh){ meshes.push(o); mats.push(o.material); } });
-      npc.userData.deathMeshes = meshes;
-      npc.userData.deathOrigMats = mats;
-
-      kills++; if(killsEl) killsEl.textContent = String(kills);
+      const meshes=[], mats=[]; npc.traverse(o=>{ if(o.isMesh){ meshes.push(o); mats.push(o.material); } });
+      npc.userData.deathMeshes=meshes; npc.userData.deathOrigMats=mats;
+      kills++; if(killsEl) killsEl.textContent=String(kills);
     }
 
     /* ======= Adaptive ======= */
     function autoResolution(dt){
       if (resCooldown > 0) { resCooldown--; return; }
-      const ms = dt * 1000;
-      msAvg = msAvg * 0.9 + ms * 0.1;
-      const desired = 1000 / 60;
-      const maxPR = Math.min(devicePixelRatio, MAX_RATIO);
-      const curPR = renderer.getPixelRatio();
-      if (msAvg > desired * 1.15 && curPR > 1){
-        renderer.setPixelRatio(Math.max(1, curPR - 0.25));
-        renderer.setSize(innerWidth, innerHeight, false);
-        resCooldown = 30;
-      } else if (msAvg < desired * 0.85 && curPR < maxPR){
-        renderer.setPixelRatio(Math.min(maxPR, curPR + 0.25));
-        renderer.setSize(innerWidth, innerHeight, false);
-        resCooldown = 30;
-      }
+      const ms = dt * 1000; msAvg = msAvg * 0.9 + ms * 0.1;
+      const desired = 1000/60; const maxPR=Math.min(devicePixelRatio, MAX_RATIO); const curPR=renderer.getPixelRatio();
+      if (msAvg > desired * 1.15 && curPR > 1){ renderer.setPixelRatio(Math.max(1, curPR - 0.25)); renderer.setSize(innerWidth, innerHeight, false); resCooldown = 30; }
+      else if (msAvg < desired * 0.85 && curPR < maxPR){ renderer.setPixelRatio(Math.min(maxPR, curPR + 0.25)); renderer.setSize(innerWidth, innerHeight, false); resCooldown = 30; }
     }
     function applyNpcBudget(){ for (let i=0;i<npcs.length;i++) npcs[i].visible = (i < npcBudget); }
-    function tuneNpcBudget(){
-      if (msAvg > 22 && npcBudget > 18){ npcBudget -= 2; applyNpcBudget(); }
-      if (msAvg < 14 && npcBudget < NPC_MAX){ npcBudget += 2; applyNpcBudget(); }
-    }
+    function tuneNpcBudget(){ if (msAvg > 22 && npcBudget > 18){ npcBudget -= 2; applyNpcBudget(); } if (msAvg < 14 && npcBudget < NPC_MAX){ npcBudget += 2; applyNpcBudget(); } }
     function disposeNode(node){
       node.traverse(obj=>{
         if (obj.geometry) obj.geometry.dispose();
-        if (obj.material){
-          if (Array.isArray(obj.material)) obj.material.forEach(m=>m.dispose());
-          else obj.material.dispose();
-        }
+        if (obj.material){ if(Array.isArray(obj.material)) obj.material.forEach(m=>m.dispose()); else obj.material.dispose(); }
         if (obj.texture) obj.texture.dispose?.();
       });
     }
 
-    /* ======= Main Loop ======= */
+    /* ======= Loop ======= */
     function animate(){
       requestAnimationFrame(animate);
-      const dt = Math.min(clock.getDelta(), 0.05);
-      const t  = clock.getElapsedTime();
-
-      autoResolution(dt);
-      tuneNpcBudget();
+      const dt = Math.min(clock.getDelta(), 0.05); const t  = clock.getElapsedTime();
+      autoResolution(dt); tuneNpcBudget();
 
       const rotFactor = -Math.PI * 3.2;
       if(!useSwipe){ rotTarget = ((mouseX - innerWidth/2) / (innerWidth/2)) * rotFactor; }
       player.rotation.y += (rotTarget - player.rotation.y) * 0.1;
-
       player.translateZ(-RUN_SPEED*dt);
 
       const swing = Math.sin(t*6)*.5, bend = Math.max(0,Math.sin(t*6))*.5;
       const ud = player.userData;
-      ud.leftLeg.up.rotation.x  = swing;
-      ud.rightLeg.up.rotation.x = -swing;
-      ud.leftLeg.lo.rotation.x  = -bend;
-      ud.rightLeg.lo.rotation.x = -Math.max(0,Math.sin(t*6+Math.PI))*.5;
-      ud.leftArm.up.rotation.x  = -swing*.6;
-      ud.rightArm.up.rotation.x =  swing*.6;
+      ud.leftLeg.up.rotation.x  = swing; ud.rightLeg.up.rotation.x = -swing;
+      ud.leftLeg.lo.rotation.x  = -bend; ud.rightLeg.lo.rotation.x = -Math.max(0,Math.sin(t*6+Math.PI))*.5;
+      ud.leftArm.up.rotation.x  = -swing*.6; ud.rightArm.up.rotation.x =  swing*.6;
 
       for(let i=npcs.length-1;i>=0;i--){
-        const n = npcs[i];
-        if (!n.visible && !n.userData.dying) continue;
-
+        const n = npcs[i]; if (!n.visible && !n.userData.dying) continue;
         if(n.userData.dying){
-          const d = n.userData.dying;
-          const phase = Math.floor((t - d.start)/BLINK_INTERVAL);
+          const d=n.userData.dying; const phase=Math.floor((t-d.start)/BLINK_INTERVAL);
           if(!d.sinking){
             if(phase < BLINK_COUNT*2){
-              const on = (phase % 2) === 0;
-              if(on !== d._lastOn){
-                d._lastOn = on;
-                const meshes = n.userData.deathMeshes, mats = n.userData.deathOrigMats;
-                for(let k=0;k<meshes.length;k++){ meshes[k].material = on ? RED_FLASH_MAT : mats[k]; }
-              }
-            }else{
-              const meshes = n.userData.deathMeshes;
-              for(let k=0;k<meshes.length;k++){ meshes[k].material = RED_FLASH_MAT; }
-              d.sinking = true;
-            }
-          }else{
-            n.position.y -= SINK_SPEED*dt;
-            if(n.position.y < -2.5){ scene.remove(n); npcs.splice(i,1); continue; }
-          }
+              const on=(phase%2)===0;
+              if(on!==d._lastOn){ d._lastOn=on; const meshes=n.userData.deathMeshes, mats=n.userData.deathOrigMats; for(let k=0;k<meshes.length;k++){ meshes[k].material = on ? RED_FLASH_MAT : mats[k]; } }
+            }else{ const meshes=n.userData.deathMeshes; for(let k=0;k<meshes.length;k++){ meshes[k].material = RED_FLASH_MAT; } d.sinking=true; }
+          }else{ n.position.y -= SINK_SPEED*dt; if(n.position.y < -2.5){ scene.remove(n); npcs.splice(i,1); continue; } }
         }else{
           n.translateZ(-n.userData.speed*dt);
           if(Math.random()<.01) n.rotation.y += (Math.random()-.5)*Math.PI/2;
 
           if (msAvg < 22){
-            const ph = t*6 + n.userData.phase;
-            const sw = Math.sin(ph)*.45;
-            const bn = Math.max(0, Math.sin(ph))*.45;
-            const udn = n.userData;
-            udn.leftLeg.up.rotation.x  = sw;
-            udn.rightLeg.up.rotation.x = -sw;
-            udn.leftLeg.lo.rotation.x  = -bn;
-            udn.rightLeg.lo.rotation.x = -Math.max(0, Math.sin(ph+Math.PI))*.45;
-            udn.leftArm.up.rotation.x  = -sw*.6;
-            udn.rightArm.up.rotation.x =  sw*.6;
+            const ph=t*6+n.userData.phase; const sw=Math.sin(ph)*.45; const bn=Math.max(0, Math.sin(ph))*.45;
+            const udn=n.userData;
+            udn.leftLeg.up.rotation.x=sw; udn.rightLeg.up.rotation.x=-sw;
+            udn.leftLeg.lo.rotation.x=-bn; udn.rightLeg.lo.rotation.x=-Math.max(0, Math.sin(ph+Math.PI))*.45;
+            udn.leftArm.up.rotation.x=-sw*.6; udn.rightArm.up.rotation.x= sw*.6;
           }
-
           if(n.userData.beacon){
-            const pulse = Math.sin(t*3.6 + n.userData.phase);
-            const scale = n.userData.beaconBase * (1 + 0.1*pulse);
+            const pulse=Math.sin(t*3.6 + n.userData.phase);
+            const scale=n.userData.beaconBase*(1 + 0.1*pulse);
             n.userData.beacon.scale.setScalar(scale);
             n.userData.beacon.material.opacity = 0.65 + 0.2*pulse;
           }
 
           if(n.position.distanceToSquared(player.position) > (CHUNK_SIZE*CHUNK_SIZE*9)){
-            n.position.copy(player.position).add(new THREE.Vector3((Math.random()-.5)*CHUNK_SIZE, 0, (Math.random()-.5)*CHUNK_SIZE));
+            n.position.copy(player.position).add(new THREE.Vector3((Math.random()-.5)*CHUNK_SIZE,0,(Math.random()-.5)*CHUNK_SIZE));
           }
         }
       }
 
-      // Laser
       for(let i=beams.length-1;i>=0;i--){
-        const b = beams[i];
-        const mv = TMP_V1.copy(b.userData.dir).multiplyScalar(LASER_SPEED*dt);
-        b.position.add(mv);
-        b.userData.traveled += mv.length();
+        const b=beams[i]; const mv=TMP_V1.copy(b.userData.dir).multiplyScalar(LASER_SPEED*dt);
+        b.position.add(mv); b.userData.traveled += mv.length();
         for(let j=npcs.length-1;j>=0;j--){
-          const npc=npcs[j];
-          if(!npc.visible || npc.userData.dying) continue;
+          const npc=npcs[j]; if(!npc.visible || npc.userData.dying) continue;
           if(npc.position.distanceTo(b.position) < npc.userData.hit){
-            triggerBlinkDeath(npc, t);
-            releaseBeam(b); beams.splice(i,1);
-            break;
+            triggerBlinkDeath(npc, t); releaseBeam(b); beams.splice(i,1); break;
           }
         }
         if(b.userData.traveled>600){ releaseBeam(b); beams.splice(i,1); }
       }
 
-      // FX
       for(let i=explosions.length-1;i>=0;i--){
         const s=explosions[i];
         s.scale.multiplyScalar(1+dt*6);
@@ -738,14 +596,11 @@
         if(s.material.opacity<=0){ scene.remove(s); explosions.splice(i,1); }
       }
 
-      // World streaming
-      const cx = Math.floor(player.position.x/CHUNK_SIZE);
-      const cz = Math.floor(player.position.z/CHUNK_SIZE);
-      active.clear();
-      let built = 0, buildCap = 1;
+      const cx=Math.floor(player.position.x/CHUNK_SIZE), cz=Math.floor(player.position.z/CHUNK_SIZE);
+      active.clear(); let built=0, buildCap=1;
       for(let dx=-ACTIVE_RADIUS; dx<=ACTIVE_RADIUS; dx++){
         for(let dz=-ACTIVE_RADIUS; dz<=ACTIVE_RADIUS; dz++){
-          const K = key(cx+dx, cz+dz); active.add(K);
+          const K=key(cx+dx, cz+dz); active.add(K);
           if(!gridChunks.has(K) && built<buildCap){ makeGrid(cx+dx, cz+dz); built++; }
           if(!cityChunks.has(K) && built<buildCap){ makeCity(cx+dx, cz+dz); built++; }
         }
@@ -753,14 +608,11 @@
       for(const [k,o] of gridChunks) if(!active.has(k)){ scene.remove(o); disposeNode(o); gridChunks.delete(k); }
       for(const [k,o] of cityChunks) if(!active.has(k)){ scene.remove(o); disposeNode(o); cityChunks.delete(k); }
 
-      // Kamera
       const camPos = TMP_V2.copy(player.position).add(camOffset.clone().applyQuaternion(player.quaternion));
       camera.position.lerp(camPos, .1);
       camera.lookAt(player.position.x, player.position.y+lookY, player.position.z);
-
       renderer.render(scene, camera);
     }
-
   </script>
 </body>
 </html>
