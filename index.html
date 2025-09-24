@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="preconnect" href="https://cdn.jsdelivr.net" />
 
-  <!-- Keep the original font as-is; enable swap behavior via Google Fonts. -->
+  <!-- Keep the original font as-is; add swap behavior via Google Fonts stylesheet. -->
   <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
 
   <!-- Module preloads speed up first paint of the scene without changing behavior. -->
@@ -25,21 +25,14 @@
       --edge-pad:20px;                    /* Outset padding from screen edges and notches. */
       --row-gap:clamp(12px,3.8vw,28px);  /* Horizontal gap between the three HUD/link columns. */
     }
-
-    /* Enlarge UI for touch devices for comfortable tap targets. */
     @media (pointer:coarse){
-      :root{ --ui-size:clamp(20px,5.4vw,28px); --row-gap:clamp(14px,5vw,32px); }
+      :root{ --ui-size:clamp(20px,5.4vw,28px); --row-gap:clamp(14px,5vw,32px); } /* Enlarge UI on touch devices for comfortable tap targets. */
     }
-
-    /* Tighten layout on very small phones while preserving proportions. */
     @media (max-width:380px) and (pointer:coarse){
-      :root{ --ui-size:clamp(19px,5.8vw,27px); --row-gap:clamp(10px,5.6vw,22px); }
+      :root{ --ui-size:clamp(19px,5.8vw,27px); --row-gap:clamp(10px,5.6vw,22px); } /* Tighten layout on very small phones while preserving proportions. */
     }
-
-    /* Landscape on touch: scale by whichever axis yields better readability on tall phones. */
     @media (orientation:landscape) and (pointer:coarse){
-      /* On devices like Pixel 8 Pro, 3.6vh can be too small; allow width-based growth with 2.2vw. */
-      :root{ --ui-size:clamp(18px, max(3.6vh, 2.2vw), 24px); }
+      :root{ --ui-size:clamp(16px,3.6vh,22px); } /* In landscape on touch, scale with viewport height to keep UI legible. */
     }
 
     *{box-sizing:border-box}
@@ -53,7 +46,7 @@
       font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif; color:var(--fg);
       touch-action:none; /* Disable browser gesture handling to allow custom touch controls. */
     }
-    /* Prefer the dynamic viewport unit when supported to avoid mobile browser chrome jumps. */
+    /* Prefer the dynamic viewport unit when supported to avoid iOS browser chrome jumps. */
     @supports (height: 100svh){ html,body{height:100svh} }
 
     canvas{display:block}
@@ -61,8 +54,6 @@
     /* Top HUD: center three items with tight spacing; keep outer padding via safe-area and --edge-pad. */
     #hud{
       position:absolute; left:0; right:0;
-      /* Fallback first (no env support), then safe-area override. */
-      top:var(--edge-pad);
       top:calc(env(safe-area-inset-top) + var(--edge-pad));
       display:flex; justify-content:center; align-items:center; gap:var(--row-gap);
       /* Provide explicit zero paddings first for browsers without env() support, then override. */
@@ -454,39 +445,12 @@
     function onTouchCancel(ev){ const list=ev.changedTouches; for(let k=0;k<list.length;k++){ const id=list[k].identifier; touches.delete(id); if(id===steerId) steerId=null; } }
 
     // Adapt FOV and camera offset to aspect ratio; keep composition stable across devices.
-    // On small handsets (e.g., Pixel 8 Pro), gently increase perceived size by reducing FOV and moving the camera closer.
     function onResize(){
       const a = innerWidth/innerHeight;
-
-      // Treat small handsets specially: coarse pointer + small min dimension.
-      const minDim = Math.min(innerWidth, innerHeight);
-      const smallHandset = useSwipe && minDim <= 480;
-
-      if(a < .6){
-        camera.fov = smallHandset ? 84 : 86;                 // -2° on small phones
-        camOffset.set(0, smallHandset ? 5.9 : 6.5,           // bring camera a touch closer
-                         smallHandset ? 10.8 : 12);
-        lookY = smallHandset ? 3.2 : 3.4;
-      }
-      else if(a < .85){
-        camera.fov = smallHandset ? 80 : 82;
-        camOffset.set(0, smallHandset ? 4.8 : 5.2,
-                         smallHandset ? 9.2 : 10);
-        lookY = smallHandset ? 2.8 : 3.0;
-      }
-      else if(a < 1){
-        camera.fov = smallHandset ? 76 : 78;
-        camOffset.set(0, smallHandset ? 3.9 : 4.2,
-                         smallHandset ? 8.2 : 8.8);
-        lookY = smallHandset ? 2.45 : 2.6;
-      }
-      else{
-        camera.fov = smallHandset ? 72 : 74;
-        camOffset.set(0, smallHandset ? 3.0 : 3.2,
-                         smallHandset ? 6.6 : 7.2);
-        lookY = smallHandset ? 2.05 : 2.2;
-      }
-
+      if(a < .6){ camera.fov = 86;  camOffset.set(0, 6.5, 12); lookY = 3.4; }
+      else if(a < .85){ camera.fov = 82; camOffset.set(0, 5.2, 10); lookY = 3.0; }
+      else if(a < 1){ camera.fov = 78; camOffset.set(0, 4.2, 8.8); lookY = 2.6; }
+      else { camera.fov = 74; camOffset.set(0, 3.2, 7.2); lookY = 2.2; }
       camera.aspect=a; camera.updateProjectionMatrix();
       renderer.setSize(innerWidth, innerHeight);
     }
