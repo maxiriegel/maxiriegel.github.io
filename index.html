@@ -95,15 +95,7 @@
     #links a:hover { color: #0ff; transform: translateY(-2px); text-shadow: 0 0 10px rgba(0,255,255,.6); }
     #links a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
 
-    /* Loading & Compatibility overlays */
-    #loader {
-      position: fixed; inset: 0; z-index: 10000;
-      background: #000; color: var(--accent);
-      display: flex; align-items: center; justify-content: center;
-      font-family: var(--ui-font); font-size: calc(var(--ui-size) * 1.5);
-      transition: opacity 0.4s ease;
-    }
-
+    /* Compatibility overlays */
     #compat {
       position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
       background: linear-gradient(180deg, #0b1425, #0e1a32);
@@ -131,8 +123,6 @@
 </head>
 <body>
   <!-- A11y/Screen-reader note: The WebGL canvas will be injected into body and given aria-roles -->
-
-  <div id="loader">Initializing System...</div>
 
   <div id="hud">
     <span id="hudLeft">Maxi</span>
@@ -261,8 +251,9 @@
 
     /* ===== Boot Sequence ===== */
     init(); 
+    animate();
 
-    async function init() {
+    function init() {
       scene = new THREE.Scene();
       scene.background = new THREE.Color(0x11203a);
       scene.fog = new THREE.FogExp2(0x0e1a32, 0.006);
@@ -278,7 +269,7 @@
       renderer.setSize(innerWidth, innerHeight);
       
       // Hard cap at 1.5 for DPR to preserve thermal limits and battery on all devices
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
       renderer.shadowMap.enabled = !isMobile;
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -326,23 +317,21 @@
       }
       applyNpcBudget();
 
-      // Modern PointerEvents only (Legacy Touch Events Removed)
-      window.addEventListener('pointerdown', onPointerDown, {passive:false});
-      window.addEventListener('pointermove', onPointerMove, {passive:false});
-      window.addEventListener('pointerup', onPointerUp, {passive:false});
-      window.addEventListener('pointercancel', onPointerCancel, {passive:false});
+      // Register input handlers: prefer PointerEvents; use TouchEvents as a fallback.
+      if ('PointerEvent' in window) {
+        window.addEventListener('pointerdown', onPointerDown, {passive:false});
+        window.addEventListener('pointermove', onPointerMove, {passive:false});
+        window.addEventListener('pointerup', onPointerUp, {passive:false});
+        window.addEventListener('pointercancel', onPointerCancel, {passive:false});
+      } else {
+        window.addEventListener('touchstart', onTouchStart, {passive:false});
+        window.addEventListener('touchmove', onTouchMove, {passive:false});
+        window.addEventListener('touchend', onTouchEnd, {passive:false});
+        window.addEventListener('touchcancel', onTouchCancel, {passive:false});
+      }
+      
       window.addEventListener('resize', onResize);
       onResize();
-
-      // Ensure 1 full render cycle and async shader compilation to prevent UI freezing
-      await renderer.compileAsync(scene, camera);
-      
-      // Hide loader smoothly
-      const loader = document.getElementById('loader');
-      loader.style.opacity = '0';
-      setTimeout(() => { loader.remove(); }, 400);
-
-      animate();
     }
 
     function makeRobot(){
@@ -374,7 +363,7 @@
       return g;
     }
 
-    /* ===== Input Handling (Pure PointerEvents) ===== */
+    /* ===== Input Handling (PointerEvents) ===== */
     function isInLinksArea(target){ return target && target.closest && target.closest('#links'); }
     function registerTouch(e){ touches.set(e.pointerId, { x0:e.clientX, y0:e.clientY, t0:performance.now(), x:e.clientX, y:e.clientY, moved:false }); }
     function updateTouch(e){ const t=touches.get(e.pointerId); if(!t) return; t.x=e.clientX; t.y=e.clientY; const dx=t.x-t.x0, dy=t.y-t.y0; if(dx*dx+dy*dy>64) t.moved=true; }
@@ -415,6 +404,47 @@
     }
 
     function onPointerCancel(e){ if(e.pointerId===steerId) steerId=null; clearTouch(e); }
+
+    /* ===== TouchEvents fallback: mirrors PointerEvents logic for older browsers. ===== */
+    function onTouchStart(ev){
+      if(isInLinksArea(ev.target)) return;
+      const t = ev.changedTouches[0];
+      const id = t.identifier;
+      if(steerId===null) steerId=id;
+      touches.set(id,{ x0:t.clientX,y0:t.clientY,t0:performance.now(), x:t.clientX,y:t.clientY,moved:false, prevX:t.clientX });
+      ev.preventDefault();
+    }
+    
+    function onTouchMove(ev){
+      const list = ev.changedTouches;
+      for(let k=0;k<list.length;k++){
+        const t = list[k];
+        if(t.identifier!==steerId) continue;
+        const obj = touches.get(steerId); if(!obj) continue;
+        const dx = t.clientX - (obj.prevX ?? t.clientX);
+        obj.prevX = t.clientX;
+        obj.x=t.clientX; obj.y=t.clientY;
+        const ddx = obj.x - obj.x0, ddy = obj.y - obj.y0;
+        if(ddx*ddx+ddy*ddy>64) obj.moved=true;
+        rotTarget = Math.max(-ROT_CLAMP, Math.min(ROT_CLAMP, rotTarget - dx * TOUCH_SENS));
+        ev.preventDefault();
+      }
+    }
+    
+    function onTouchEnd(ev){
+      const list = ev.changedTouches;
+      for(let k=0;k<list.length;k++){
+        const t = list[k]; const id=t.identifier; const obj=touches.get(id); if(!obj) continue;
+        const dt=performance.now()-obj.t0; const dx=obj.x-obj.x0, dy=obj.y-obj.y0;
+        const isTap = !obj.moved && (dx*dx+dy*dy)<TAP_DIST2 && dt<TAP_TIME;
+        if(id!==steerId){ if(isTap && !isInLinksArea(ev.target)) shoot(); }
+        else{ if(isTap && !isInLinksArea(ev.target)) shoot(); steerId=null; }
+        touches.delete(id);
+      }
+      ev.preventDefault();
+    }
+    
+    function onTouchCancel(ev){ const list=ev.changedTouches; for(let k=0;k<list.length;k++){ const id=list[k].identifier; touches.delete(id); if(id===steerId) steerId=null; } }
 
     function onResize(){
       const a = innerWidth/innerHeight;
@@ -484,27 +514,30 @@
       }
       
       // Memory Optimization: We reuse CITY_BODY_MAT globally. No new shader compilation!
-      const inst = new THREE.InstancedMesh(BASE_BOX, CITY_BODY_MAT, builds.length); 
-      inst.castShadow=false; inst.receiveShadow=false; inst.renderOrder=-2;
-      
-      const colorBuckets = new Map(); for(const c of NEON) colorBuckets.set(c, []);
-      const m=new THREE.Matrix4(), s=new THREE.Vector3(), q=new THREE.Quaternion(), p=new THREE.Vector3();
-      
-      for(let idx=0; idx<builds.length; idx++){
-        const {w,d,h,px,pz}=builds[idx]; p.set(px,h/2,pz); q.identity(); s.set(w,h,d); m.compose(p,q,s); inst.setMatrixAt(idx,m);
-        const eg=new THREE.EdgesGeometry(new THREE.BoxGeometry(w,h,d));
-        eg.applyMatrix4(new THREE.Matrix4().makeTranslation(px,h/2,pz));
-        const rr=rand2(Math.floor(px+group.position.x), Math.floor(pz+group.position.z));
-        const col=NEON[Math.floor(rr*NEON.length)]; colorBuckets.get(col).push(eg);
-      }
-      inst.instanceMatrix.needsUpdate=true; group.add(inst);
-      
-      for(const [col,list] of colorBuckets){
-        if(!list.length) continue;
-        const merged=mergeGeometries(list,false);
-        // Memory Optimization: We grab the global Material for this color. No new shader!
-        const ln = new THREE.LineSegments(merged, CITY_NEON_MATS.get(col)); 
-        ln.renderOrder=-100; group.add(ln);
+      // Safeguard: Do not create InstancedMesh if chunk randomly generated 0 buildings
+      if (builds.length > 0) {
+        const inst = new THREE.InstancedMesh(BASE_BOX, CITY_BODY_MAT, builds.length); 
+        inst.castShadow=false; inst.receiveShadow=false; inst.renderOrder=-2;
+        
+        const colorBuckets = new Map(); for(const c of NEON) colorBuckets.set(c, []);
+        const m=new THREE.Matrix4(), s=new THREE.Vector3(), q=new THREE.Quaternion(), p=new THREE.Vector3();
+        
+        for(let idx=0; idx<builds.length; idx++){
+          const {w,d,h,px,pz}=builds[idx]; p.set(px,h/2,pz); q.identity(); s.set(w,h,d); m.compose(p,q,s); inst.setMatrixAt(idx,m);
+          const eg=new THREE.EdgesGeometry(new THREE.BoxGeometry(w,h,d));
+          eg.applyMatrix4(new THREE.Matrix4().makeTranslation(px,h/2,pz));
+          const rr=rand2(Math.floor(px+group.position.x), Math.floor(pz+group.position.z));
+          const col=NEON[Math.floor(rr*NEON.length)]; colorBuckets.get(col).push(eg);
+        }
+        inst.instanceMatrix.needsUpdate=true; group.add(inst);
+        
+        for(const [col,list] of colorBuckets){
+          if(!list.length) continue;
+          const merged=mergeGeometries(list,false);
+          // Memory Optimization: We grab the global Material for this color. No new shader!
+          const ln = new THREE.LineSegments(merged, CITY_NEON_MATS.get(col)); 
+          ln.renderOrder=-100; group.add(ln);
+        }
       }
       scene.add(group); cityChunks.set(key(cx,cz), group);
     }
@@ -523,7 +556,7 @@
       if (resCooldown > 0) { resCooldown--; return; }
       const ms = dt * 1000; msAvg = msAvg * 0.9 + ms * 0.1;
       const desired = 1000/60; 
-      const maxPR = Math.min(window.devicePixelRatio, 1.5); // Hard cap applied
+      const maxPR = Math.min(window.devicePixelRatio || 1, 1.5); // Hard cap applied with fallback
       const curPR = renderer.getPixelRatio();
       if (msAvg > desired * 1.15 && curPR > 1){ renderer.setPixelRatio(Math.max(1, curPR - 0.25)); renderer.setSize(innerWidth, innerHeight, false); resCooldown = 30; }
       else if (msAvg < desired * 0.85 && curPR < maxPR){ renderer.setPixelRatio(Math.min(maxPR, curPR + 0.25)); renderer.setSize(innerWidth, innerHeight, false); resCooldown = 30; }
@@ -547,7 +580,7 @@
       const dt = Math.min(clock.getDelta(), 0.05); const t = clock.getElapsedTime();
       autoResolution(dt); tuneNpcBudget();
 
-      const useSwipe = ('pointerdown' in window && navigator.maxTouchPoints > 0);
+      const useSwipe = (('PointerEvent' in window && (navigator.maxTouchPoints||0)>0) || (typeof matchMedia==='function' && matchMedia('(pointer: coarse)').matches));
       const rotFactor = -Math.PI * 3.2;
       if(!useSwipe){ rotTarget = ((mouseX - innerWidth/2) / (innerWidth/2)) * rotFactor; }
       player.rotation.y += (rotTarget - player.rotation.y) * 0.1;
