@@ -95,7 +95,15 @@
     #links a:hover { color: #0ff; transform: translateY(-2px); text-shadow: 0 0 10px rgba(0,255,255,.6); }
     #links a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
 
-    /* Compatibility overlays */
+    /* Loading & Compatibility overlays */
+    #loader {
+      position: fixed; inset: 0; z-index: 10000;
+      background: #000; color: var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--ui-font); font-size: calc(var(--ui-size) * 1.5);
+      transition: opacity 0.4s ease;
+    }
+
     #compat {
       position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
       background: linear-gradient(180deg, #0b1425, #0e1a32);
@@ -123,6 +131,8 @@
 </head>
 <body>
   <!-- A11y/Screen-reader note: The WebGL canvas will be injected into body and given aria-roles -->
+
+  <div id="loader">Initializing System...</div>
 
   <div id="hud">
     <span id="hudLeft">Maxi</span>
@@ -212,7 +222,6 @@
     const CITY_BODY_MAT = new THREE.MeshBasicMaterial({ color:0x0d0f22, transparent:true, opacity:.05, depthWrite:false, polygonOffset:true, polygonOffsetFactor:1, polygonOffsetUnits:1 });
     const CITY_NEON_MATS = new Map();
     NEON.forEach(col => CITY_NEON_MATS.set(col, new THREE.LineBasicMaterial({color:col, depthWrite:true, depthTest:true, toneMapped:false, fog:true})));
-    const BASE_BOX = new THREE.BoxGeometry(1, 1, 1);
 
     // Robot Materials
     const MAT_BODY = new THREE.MeshPhysicalMaterial({ color:0xf5f8ff, metalness:1.0, roughness:0.018, clearcoat:1.0, clearcoatRoughness:0.012, ior:1.46, envMapIntensity:2.3 });
@@ -332,6 +341,13 @@
       
       window.addEventListener('resize', onResize);
       onResize();
+
+      // Hide loader smoothly (This was mistakenly removed earlier!)
+      const loader = document.getElementById('loader');
+      if (loader) {
+        loader.style.opacity = '0';
+        setTimeout(() => { loader.remove(); }, 400);
+      }
     }
 
     function makeRobot(){
@@ -363,7 +379,7 @@
       return g;
     }
 
-    /* ===== Input Handling (PointerEvents) ===== */
+    /* ===== Input Handling ===== */
     function isInLinksArea(target){ return target && target.closest && target.closest('#links'); }
     function registerTouch(e){ touches.set(e.pointerId, { x0:e.clientX, y0:e.clientY, t0:performance.now(), x:e.clientX, y:e.clientY, moved:false }); }
     function updateTouch(e){ const t=touches.get(e.pointerId); if(!t) return; t.x=e.clientX; t.y=e.clientY; const dx=t.x-t.x0, dy=t.y-t.y0; if(dx*dx+dy*dy>64) t.moved=true; }
@@ -513,10 +529,10 @@
         }
       }
       
-      // Memory Optimization: We reuse CITY_BODY_MAT globally. No new shader compilation!
-      // Safeguard: Do not create InstancedMesh if chunk randomly generated 0 buildings
       if (builds.length > 0) {
-        const inst = new THREE.InstancedMesh(BASE_BOX, CITY_BODY_MAT, builds.length); 
+        // Bugfix: Instantiate a new BoxGeometry per chunk to prevent accidental global disposal 
+        // when a chunk goes out of bounds. The Memory savings of sharing Mats is still active.
+        const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), CITY_BODY_MAT, builds.length); 
         inst.castShadow=false; inst.receiveShadow=false; inst.renderOrder=-2;
         
         const colorBuckets = new Map(); for(const c of NEON) colorBuckets.set(c, []);
@@ -534,7 +550,6 @@
         for(const [col,list] of colorBuckets){
           if(!list.length) continue;
           const merged=mergeGeometries(list,false);
-          // Memory Optimization: We grab the global Material for this color. No new shader!
           const ln = new THREE.LineSegments(merged, CITY_NEON_MATS.get(col)); 
           ln.renderOrder=-100; group.add(ln);
         }
@@ -556,7 +571,7 @@
       if (resCooldown > 0) { resCooldown--; return; }
       const ms = dt * 1000; msAvg = msAvg * 0.9 + ms * 0.1;
       const desired = 1000/60; 
-      const maxPR = Math.min(window.devicePixelRatio || 1, 1.5); // Hard cap applied with fallback
+      const maxPR = Math.min(window.devicePixelRatio || 1, 1.5); 
       const curPR = renderer.getPixelRatio();
       if (msAvg > desired * 1.15 && curPR > 1){ renderer.setPixelRatio(Math.max(1, curPR - 0.25)); renderer.setSize(innerWidth, innerHeight, false); resCooldown = 30; }
       else if (msAvg < desired * 0.85 && curPR < maxPR){ renderer.setPixelRatio(Math.min(maxPR, curPR + 0.25)); renderer.setSize(innerWidth, innerHeight, false); resCooldown = 30; }
@@ -565,24 +580,27 @@
     function applyNpcBudget(){ for (let i=0;i<npcs.length;i++) npcs[i].visible = (i < npcBudget); }
     function tuneNpcBudget(){ if (msAvg > 22 && npcBudget > 18){ npcBudget -= 2; applyNpcBudget(); } if (msAvg < 14 && npcBudget < NPC_MAX){ npcBudget += 2; applyNpcBudget(); } }
     
-    // We only dispose Geometries now. Materials are globally cached.
     function disposeNode(node){
       node.traverse(obj=>{
+        // Safely dispose the per-chunk instanced geometries
         if (obj.geometry) obj.geometry.dispose();
-        // Removed material disposal to enable cache hits
         if (obj.texture) obj.texture.dispose?.();
       });
     }
 
     function animate(){
-      if (isContextLost) return; // Halt loop gracefully on context loss
+      if (isContextLost) return; 
       requestAnimationFrame(animate);
       const dt = Math.min(clock.getDelta(), 0.05); const t = clock.getElapsedTime();
       autoResolution(dt); tuneNpcBudget();
 
       const useSwipe = (('PointerEvent' in window && (navigator.maxTouchPoints||0)>0) || (typeof matchMedia==='function' && matchMedia('(pointer: coarse)').matches));
       const rotFactor = -Math.PI * 3.2;
-      if(!useSwipe){ rotTarget = ((mouseX - innerWidth/2) / (innerWidth/2)) * rotFactor; }
+      
+      // Bugfix: Division by Zero safeguard. In embedded iframes, innerWidth can be exactly 0 during the first execution frame.
+      const safeWidth = Math.max(1, innerWidth); 
+      if(!useSwipe){ rotTarget = ((mouseX - safeWidth/2) / (safeWidth/2)) * rotFactor; }
+      
       player.rotation.y += (rotTarget - player.rotation.y) * 0.1;
       player.translateZ(-RUN_SPEED*dt);
 
