@@ -10,7 +10,7 @@
   <meta property="og:title" content="Maxi Riegel | Interactive 3D Portfolio" />
   <meta property="og:description" content="Explore my interactive procedural 3D portfolio..." />
   <meta property="og:type" content="website" />
-  <meta property="og:image" content="https://images.unsplash.com/photo-1614729939124-032f0b56c9ce?q=80&w=1200&auto=format&fit=crop" /> <!-- Replace with actual screenshot URL -->
+  <meta property="og:image" content="https://images.unsplash.com/photo-1614729939124-032f0b56c9ce?q=80&w=1200&auto=format&fit=crop" />
 
   <!-- Preconnect to reduce DNS/TLS latency -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -43,7 +43,6 @@
 
     * { box-sizing: border-box; }
     
-    /* overscroll-behavior prevents iOS Safari "pull-to-refresh" and edge swipe navigations */
     html, body { height: 100%; overscroll-behavior: none; }
     
     html {
@@ -60,7 +59,6 @@
 
     canvas { display: block; outline: none; }
 
-    /* UI Contrast: Added subtle gradient backgrounds to ensure legibility against bright 3D geometry */
     #hud {
       position: absolute; left: 0; right: 0;
       top: 0; padding-top: calc(env(safe-area-inset-top) + var(--edge-pad));
@@ -95,15 +93,6 @@
     #links a:hover { color: #0ff; transform: translateY(-2px); text-shadow: 0 0 10px rgba(0,255,255,.6); }
     #links a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
 
-    /* Loading & Compatibility overlays */
-    #loader {
-      position: fixed; inset: 0; z-index: 10000;
-      background: #000; color: var(--accent);
-      display: flex; align-items: center; justify-content: center;
-      font-family: var(--ui-font); font-size: calc(var(--ui-size) * 1.5);
-      transition: opacity 0.4s ease;
-    }
-
     #compat {
       position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
       background: linear-gradient(180deg, #0b1425, #0e1a32);
@@ -130,10 +119,6 @@
   </script>
 </head>
 <body>
-  <!-- A11y/Screen-reader note: The WebGL canvas will be injected into body and given aria-roles -->
-
-  <div id="loader">Initializing System...</div>
-
   <div id="hud">
     <span id="hudLeft">Maxi</span>
     <span id="hudKills">0</span>
@@ -211,17 +196,17 @@
     const TMP_V1 = new THREE.Vector3(); const TMP_V2 = new THREE.Vector3();
     let msAvg = 16, resCooldown = 0; const NPC_MAX = NPC_COUNT; let npcBudget = NPC_MAX;
 
-    // Laser Materials
+    // Shared Materials & Master Geometry
     const LASER_CORE_GEOM = new THREE.CylinderGeometry(LASER_CORE_R, LASER_CORE_R, 1, 20, 1, true);
     const LASER_GLOW_GEOM = new THREE.CylinderGeometry(LASER_GLOW_R, LASER_GLOW_R, 1, 12, 1, true);
     const LASER_CORE_MAT = new THREE.MeshBasicMaterial({ color:LASER_CORE_COL, transparent:true, opacity:1.0, blending:THREE.AdditiveBlending, depthWrite:false, toneMapped:false });
     const LASER_GLOW_MAT = new THREE.MeshBasicMaterial({ color:LASER_GLOW_COL, transparent:true, opacity:0.34, blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide, toneMapped:false });
-    const EXPLO_MAT = new THREE.SpriteMaterial({color:0xff6600, transparent:true, opacity:1, blending:THREE.AdditiveBlending, toneMapped:false});
-
+    
     // Globally Shared City Materials (Prevents shader recompilation when new chunks load)
     const CITY_BODY_MAT = new THREE.MeshBasicMaterial({ color:0x0d0f22, transparent:true, opacity:.05, depthWrite:false, polygonOffset:true, polygonOffsetFactor:1, polygonOffsetUnits:1 });
     const CITY_NEON_MATS = new Map();
     NEON.forEach(col => CITY_NEON_MATS.set(col, new THREE.LineBasicMaterial({color:col, depthWrite:true, depthTest:true, toneMapped:false, fog:true})));
+    const BASE_BOX = new THREE.BoxGeometry(1, 1, 1);
 
     // Robot Materials
     const MAT_BODY = new THREE.MeshPhysicalMaterial({ color:0xf5f8ff, metalness:1.0, roughness:0.018, clearcoat:1.0, clearcoatRoughness:0.012, ior:1.46, envMapIntensity:2.3 });
@@ -275,26 +260,26 @@
         alpha: false, stencil: false, preserveDrawingBuffer: false
       });
       renderer.physicallyCorrectLights = true;
-      renderer.setSize(innerWidth, innerHeight);
       
-      // Hard cap at 1.5 for DPR to preserve thermal limits and battery on all devices
+      const safeW = Math.max(1, innerWidth);
+      const safeH = Math.max(1, innerHeight);
+      renderer.setSize(safeW, safeH);
+      
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
       renderer.shadowMap.enabled = !isMobile;
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = 1.38;
       
-      // A11y
       renderer.domElement.setAttribute('role', 'img');
       renderer.domElement.setAttribute('aria-label', 'An interactive 3D scene where a robot runs endlessly through a neon grid city.');
       document.body.appendChild(renderer.domElement);
 
-      // Handle Context Loss safely
       renderer.domElement.addEventListener('webglcontextlost', (e) => {
         e.preventDefault();
         isContextLost = true;
         document.getElementById('compatTitle').innerText = "Graphics Context Lost";
-        document.getElementById('compatMsg').innerText = "The browser reclaimed graphics memory (likely because it went to the background). Please refresh the page to restore the scene.";
+        document.getElementById('compatMsg').innerText = "The browser reclaimed graphics memory. Please refresh the page to restore the scene.";
         compatEl.style.display = 'flex';
       });
 
@@ -326,7 +311,6 @@
       }
       applyNpcBudget();
 
-      // Register input handlers: prefer PointerEvents; use TouchEvents as a fallback.
       if ('PointerEvent' in window) {
         window.addEventListener('pointerdown', onPointerDown, {passive:false});
         window.addEventListener('pointermove', onPointerMove, {passive:false});
@@ -341,13 +325,6 @@
       
       window.addEventListener('resize', onResize);
       onResize();
-
-      // Hide loader smoothly (This was mistakenly removed earlier!)
-      const loader = document.getElementById('loader');
-      if (loader) {
-        loader.style.opacity = '0';
-        setTimeout(() => { loader.remove(); }, 400);
-      }
     }
 
     function makeRobot(){
@@ -421,7 +398,7 @@
 
     function onPointerCancel(e){ if(e.pointerId===steerId) steerId=null; clearTouch(e); }
 
-    /* ===== TouchEvents fallback: mirrors PointerEvents logic for older browsers. ===== */
+    /* ===== TouchEvents fallback ===== */
     function onTouchStart(ev){
       if(isInLinksArea(ev.target)) return;
       const t = ev.changedTouches[0];
@@ -463,13 +440,18 @@
     function onTouchCancel(ev){ const list=ev.changedTouches; for(let k=0;k<list.length;k++){ const id=list[k].identifier; touches.delete(id); if(id===steerId) steerId=null; } }
 
     function onResize(){
-      const a = innerWidth/innerHeight;
+      const safeW = Math.max(1, innerWidth);
+      const safeH = Math.max(1, innerHeight);
+      const a = safeW / safeH;
+      
       if(a < .6){ camera.fov = 86;  camOffset.set(0, 6.5, 12); lookY = 3.4; }
       else if(a < .85){ camera.fov = 82; camOffset.set(0, 5.2, 10); lookY = 3.0; }
       else if(a < 1){ camera.fov = 78; camOffset.set(0, 4.2, 8.8); lookY = 2.6; }
       else { camera.fov = 74; camOffset.set(0, 3.2, 7.2); lookY = 2.2; }
-      camera.aspect=a; camera.updateProjectionMatrix();
-      renderer.setSize(innerWidth, innerHeight);
+      
+      camera.aspect=a; 
+      camera.updateProjectionMatrix();
+      renderer.setSize(safeW, safeH);
     }
 
     function acquireBeam(){
@@ -530,9 +512,9 @@
       }
       
       if (builds.length > 0) {
-        // Bugfix: Instantiate a new BoxGeometry per chunk to prevent accidental global disposal 
-        // when a chunk goes out of bounds. The Memory savings of sharing Mats is still active.
-        const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), CITY_BODY_MAT, builds.length); 
+        // Safe Memory Pooling: We use the global BASE_BOX to save memory,
+        // and ensure the disposal function never deletes it!
+        const inst = new THREE.InstancedMesh(BASE_BOX, CITY_BODY_MAT, builds.length); 
         inst.castShadow=false; inst.receiveShadow=false; inst.renderOrder=-2;
         
         const colorBuckets = new Map(); for(const c of NEON) colorBuckets.set(c, []);
@@ -573,8 +555,12 @@
       const desired = 1000/60; 
       const maxPR = Math.min(window.devicePixelRatio || 1, 1.5); 
       const curPR = renderer.getPixelRatio();
-      if (msAvg > desired * 1.15 && curPR > 1){ renderer.setPixelRatio(Math.max(1, curPR - 0.25)); renderer.setSize(innerWidth, innerHeight, false); resCooldown = 30; }
-      else if (msAvg < desired * 0.85 && curPR < maxPR){ renderer.setPixelRatio(Math.min(maxPR, curPR + 0.25)); renderer.setSize(innerWidth, innerHeight, false); resCooldown = 30; }
+      
+      const safeW = Math.max(1, innerWidth);
+      const safeH = Math.max(1, innerHeight);
+      
+      if (msAvg > desired * 1.15 && curPR > 1){ renderer.setPixelRatio(Math.max(1, curPR - 0.25)); renderer.setSize(safeW, safeH, false); resCooldown = 30; }
+      else if (msAvg < desired * 0.85 && curPR < maxPR){ renderer.setPixelRatio(Math.min(maxPR, curPR + 0.25)); renderer.setSize(safeW, safeH, false); resCooldown = 30; }
     }
     
     function applyNpcBudget(){ for (let i=0;i<npcs.length;i++) npcs[i].visible = (i < npcBudget); }
@@ -582,8 +568,8 @@
     
     function disposeNode(node){
       node.traverse(obj=>{
-        // Safely dispose the per-chunk instanced geometries
-        if (obj.geometry) obj.geometry.dispose();
+        // Never delete the global BASE_BOX used across all cities!
+        if (obj.geometry && obj.geometry !== BASE_BOX) obj.geometry.dispose();
         if (obj.texture) obj.texture.dispose?.();
       });
     }
@@ -597,9 +583,12 @@
       const useSwipe = (('PointerEvent' in window && (navigator.maxTouchPoints||0)>0) || (typeof matchMedia==='function' && matchMedia('(pointer: coarse)').matches));
       const rotFactor = -Math.PI * 3.2;
       
-      // Bugfix: Division by Zero safeguard. In embedded iframes, innerWidth can be exactly 0 during the first execution frame.
+      // Complete math safety against embedded iframe zero-states
       const safeWidth = Math.max(1, innerWidth); 
-      if(!useSwipe){ rotTarget = ((mouseX - safeWidth/2) / (safeWidth/2)) * rotFactor; }
+      if(!useSwipe){ 
+        rotTarget = (((mouseX || 0) - safeWidth/2) / (safeWidth/2)) * rotFactor; 
+        if (isNaN(rotTarget)) rotTarget = 0; 
+      }
       
       player.rotation.y += (rotTarget - player.rotation.y) * 0.1;
       player.translateZ(-RUN_SPEED*dt);
